@@ -41,7 +41,8 @@ import {
 } from "@mui/icons-material";
 
 // ✅ Excel export için
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 // ✅ navlun rules / typing engine
 import { toNumber } from "../plakaAtama/navlunRules";
@@ -158,12 +159,11 @@ async function fetchGridIdByEkran({ supabase, ekranId, gridKod }) {
     return data?.id || null;
 }
 
-// output: { [kolonKod]: { gorebilir: boolean, duzenleyebilir: boolean } }
 async function fetchEffectiveGridKolonPerms({ supabase, gridId, userId, roleId }) {
     const { data: cols, error: cErr } = await supabase
         .from("grid_kolonlar")
-        .select("id,kod,aktif")      // ✅ aktif de al
-        .eq("grid_id", gridId);      // ✅ aktif filtresi YOK
+        .select("id,kod,aktif")
+        .eq("grid_id", gridId);
 
     if (cErr) throw cErr;
 
@@ -203,18 +203,18 @@ async function fetchEffectiveGridKolonPerms({ supabase, gridId, userId, roleId }
         };
     });
 
-    // ✅ burada aktif bilgisini de map’e koy
     const byKod = {};
     colList.forEach((c) => {
         const eff = userMap[c.id] ?? roleMap[c.id] ?? { gorebilir: true, duzenleyebilir: false };
         byKod[String(c.kod || "").trim()] = {
             ...eff,
-            aktif: c.aktif !== false, // ✅ aktif=false ise kapalı
+            aktif: c.aktif !== false,
         };
     });
 
     return byKod;
 }
+
 // ✅ küçük debounce hook
 function useDebouncedValue(value, delayMs = 120) {
     const [deb, setDeb] = useState(value);
@@ -239,12 +239,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     const [perm, setPerm] = useState({
         ekranGorunur: false,
         ekranYazma: false,
-        btn: {}, // kod -> boolean
+        btn: {},
     });
 
-    // ✅ grid kolon perms
     const [gridId, setGridId] = useState(null);
-    const [colPerms, setColPerms] = useState({}); // kolonKod -> { gorebilir, duzenleyebilir }
+    const [colPerms, setColPerms] = useState({});
 
     const can = useCallback(
         (btnKod) => {
@@ -254,7 +253,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         [perm]
     );
 
-    // Perm yükle
     useEffect(() => {
         let alive = true;
 
@@ -262,7 +260,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             try {
                 setPermLoading(true);
 
-                // ✅ localStorage login
                 const raw = localStorage.getItem("bapsis_user");
                 const lsUser = raw ? JSON.parse(raw) : null;
 
@@ -276,7 +273,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     return;
                 }
 
-                // ✅ kullanicilar tablosundan rol_id al
                 const { data: uRow, error: uErr } = await supabase
                     .from("kullanicilar")
                     .select("id, rol_id")
@@ -308,12 +304,16 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 const ekranIzin = await fetchEffectiveEkranIzin({ supabase, ekranId, userId, roleId });
                 const btnMap = await fetchButtonMaps({ supabase, ekranId, userId, roleId });
 
-                // ✅ grid kolon izinleri
                 const gId = await fetchGridIdByEkran({ supabase, ekranId, gridKod: GRID_KOD });
                 if (alive) setGridId(gId);
 
                 if (gId) {
-                    const permsByKod = await fetchEffectiveGridKolonPerms({ supabase, gridId: gId, userId, roleId });
+                    const permsByKod = await fetchEffectiveGridKolonPerms({
+                        supabase,
+                        gridId: gId,
+                        userId,
+                        roleId,
+                    });
                     if (alive) setColPerms(permsByKod || {});
                 } else {
                     if (alive) setColPerms({});
@@ -338,22 +338,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         };
     }, []);
 
-    /* =========================
-       ✅ GRID: görünür kolonlar
-    ========================= */
-    const visibleColumns = useMemo(() => {
-        const hasAny = colPerms && Object.keys(colPerms).length > 0;
-        if (!hasAny) return [];
-
-        return columns.filter((c) => {
-            const p = colPerms[c.key];
-            if (!p) return false;
-            if (p.aktif === false) return false;
-            if (p.gorebilir === false) return false;
-            return true;
-        });
-    }, [colPerms, columns]);
-
     const visibleColumnKeys = useMemo(() => {
         const hasAny = colPerms && Object.keys(colPerms).length > 0;
         if (!hasAny) return [];
@@ -367,7 +351,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 return true;
             })
             .map((c) => c.key);
-    }, [colPerms, columns]);
+    }, [colPerms]);
 
     const editableColumnKeys = useMemo(() => {
         const forcedListboxFields = new Set(["cekici", "surucu", "vkn"]);
@@ -387,9 +371,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 return true;
             })
             .map((c) => c.key);
-    }, [colPerms, columns]);
+    }, [colPerms]);
+
     const NAVLUN_TYPING_DELAY_MS = 1500;
     const RECOMPUTE_DELAY_MS = 900;
+    const AUTO_SAVE_DELAY_MS = 1500;
 
     const [q, setQ] = useState("");
     const qDeb = useDebouncedValue(q, 200);
@@ -397,9 +383,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [selectedRowId, setSelectedRowId] = useState(null);
-
     const [filterMissingPlate, setFilterMissingPlate] = useState(false);
-
 
     const [rows, setRows] = useState([]);
     const rowsRef = useRef([]);
@@ -413,6 +397,18 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         rows.forEach((r, i) => m.set(r.id, i));
         rowIndexRef.current = m;
     }, [rows]);
+    useEffect(() => {
+        const prevHtmlOverflow = document.documentElement.style.overflow;
+        const prevBodyOverflow = document.body.style.overflow;
+
+        document.documentElement.style.overflow = "hidden";
+        document.body.style.overflow = "hidden";
+
+        return () => {
+            document.documentElement.style.overflow = prevHtmlOverflow;
+            document.body.style.overflow = prevBodyOverflow;
+        };
+    }, []);
 
     const patchRow = useCallback((rowId, patch) => {
         setRows((prev) => {
@@ -442,10 +438,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         targetPlakaId: null,
         sourcePlaka: null,
     });
+
     const [saving, setSaving] = useState(false);
+    const [autoSaving, setAutoSaving] = useState(false);
+    const [lastAutoSaveAt, setLastAutoSaveAt] = useState(null);
+
+    const dirtyRowIdsRef = useRef(new Set());
+    const autoSaveTimerRef = useRef(null);
 
     const [vknDlg, setVknDlg] = useState({ open: false, rowId: null });
-
 
     const openVknPanel = useCallback(
         (rowId) => {
@@ -466,6 +467,50 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         []
     );
     const normDigits = useCallback((v) => String(v ?? "").replace(/\D/g, "").trim(), []);
+
+    const normalizeSearchText = useCallback((v) => {
+        return String(v ?? "")
+            .toLowerCase()
+            .replace(/\s+/g, "")
+            .replace(/[-._]/g, "")
+            .trim();
+    }, []);
+
+
+    const FILO_VKN_SET = useMemo(
+        () =>
+            new Set([
+                "ÖZMAL",
+                "YEDEK SÜRÜCÜ",
+                "23413634938-İSMET GÜMÜŞOĞLU",
+                "NİSAN-6311415717",
+                "ŞERİFOĞLU-8100823884",
+            ]),
+        []
+    );
+
+    const normalizeFiloVknText = useCallback((v) => {
+        return String(v ?? "")
+            .trim()
+            .toLocaleUpperCase("tr-TR")
+            .replace(/\s+/g, " ");
+    }, []);
+
+    const isDirectFiloVkn = useCallback(
+        (vkn) => {
+            return FILO_VKN_SET.has(normalizeFiloVknText(vkn));
+        },
+        [FILO_VKN_SET, normalizeFiloVknText]
+    );
+
+    const normalizeVarisBase = useCallback((v) => {
+        return String(v ?? "")
+            .trim()
+            .toLocaleLowerCase("tr-TR")
+            .replace(/\s+/g, " ")
+            .replace(/-\s*\d+\s*$/, "") // sondaki -1, -2, -3 kaldır
+            .trim();
+    }, []);
 
     const mapDbToRow = useCallback((r) => {
         const id = r?.id ?? `${r?.batch_id ?? "batch"}_${r?.line_no ?? Math.random()}`;
@@ -522,7 +567,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     .select(
                         "id,batch_id,line_no,seferno,sevktarihi,cekici,dorse,tc,surucu,telefon,faturavkn,varis1,varis2,varis3,datalogerno,irsaliyeno,navlun,teslimattarihsaat,updated_at"
                     )
-                    .order("line_no", { ascending: true })
+                    .order("id", { ascending: true })
                     .range(from, from + ROW_PAGE - 1);
 
                 if (batchId) qb = qb.eq("batch_id", batchId);
@@ -596,154 +641,172 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [permLoading, perm.ekranGorunur]);
 
+    const fetchNavlunFromSartlari = useCallback(
+        async ({ varis1, varis2, varis3 }) => {
+            const clean = (x) => String(x ?? "").trim();
 
-    const fetchNavlunFromSartlari = useCallback(async ({ varis1, varis2, varis3 }) => {
-        const clean = (x) => String(x ?? "").trim();
+            const v1 = clean(varis1);
+            const v2 = clean(varis2);
+            const v3 = clean(varis3);
 
-        const v1 = clean(varis1);
-        const v2 = clean(varis2);
-        const v3 = clean(varis3);
+            if (!v1) return null;
 
-        if (!v1) return null;
+            const getTekNavlun = async (nokta) => {
+                const raw = clean(nokta);
+                if (!raw) return null;
 
-        const getTekNavlun = async (nokta) => {
-            const raw = clean(nokta);
-            if (!raw) return null;
+                const exactVal = raw;
+                const normalizedVal = normalizeVarisBase(raw);
 
-            const val = raw.split("-")[0].trim();
-            if (!val) return null;
+                const exactRes = await supabase
+                    .from("navlun_sartlari")
+                    .select("navlun, id")
+                    .eq("aktif", true)
+                    .ilike("nokta_sayisi", "TEK")
+                    .ilike("nokta1", exactVal)
+                    .order("id", { ascending: false })
+                    .limit(1);
+
+                if (exactRes.error) {
+                    console.error("getTekNavlun exact error:", exactRes.error);
+                    return null;
+                }
+
+                const exactNav = exactRes.data?.[0]?.navlun ?? null;
+                if (exactNav != null && exactNav !== "") return exactNav;
+
+                if (!normalizedVal) return null;
+
+                const normRes = await supabase
+                    .from("navlun_sartlari")
+                    .select("navlun, id")
+                    .eq("aktif", true)
+                    .ilike("nokta_sayisi", "TEK")
+                    .ilike("nokta1", normalizedVal)
+                    .order("id", { ascending: false })
+                    .limit(1);
+
+                if (normRes.error) {
+                    console.error("getTekNavlun normalized error:", normRes.error);
+                    return null;
+                }
+
+                return normRes.data?.[0]?.navlun ?? null;
+            };
+            const maxNavlun = (...vals) => {
+                const nums = vals.map((x) => toNumber(x)).filter((x) => x != null);
+                if (nums.length === 0) return null;
+                return Math.max(...nums);
+            };
+
+            if (v1 && v2 && v3) {
+                const { data, error } = await supabase
+                    .from("navlun_sartlari")
+                    .select("navlun, id")
+                    .eq("aktif", true)
+                    .ilike("nokta_sayisi", "COK")
+                    .ilike("nokta1", v1)
+                    .ilike("nokta2", v2)
+                    .ilike("nokta3", v3)
+                    .order("id", { ascending: false })
+                    .limit(1);
+
+                if (error) {
+                    console.error("fetchNavlunFromSartlari COK(123) error:", error);
+                    return null;
+                }
+
+                const exactNav = data?.[0]?.navlun ?? null;
+                if (exactNav != null && exactNav !== "") return exactNav;
+
+                const [n1, n2, n3] = await Promise.all([getTekNavlun(v1), getTekNavlun(v2), getTekNavlun(v3)]);
+                return maxNavlun(n1, n2, n3);
+            }
+
+            if (v1 && v2) {
+                const resNull = await supabase
+                    .from("navlun_sartlari")
+                    .select("navlun, id")
+                    .eq("aktif", true)
+                    .ilike("nokta_sayisi", "COK")
+                    .ilike("nokta1", v1)
+                    .ilike("nokta2", v2)
+                    .is("nokta3", null)
+                    .order("id", { ascending: false })
+                    .limit(1);
+
+                const resEmpty = await supabase
+                    .from("navlun_sartlari")
+                    .select("navlun, id")
+                    .eq("aktif", true)
+                    .ilike("nokta_sayisi", "COK")
+                    .ilike("nokta1", v1)
+                    .ilike("nokta2", v2)
+                    .eq("nokta3", "")
+                    .order("id", { ascending: false })
+                    .limit(1);
+
+                const candNull = resNull.data?.[0] ?? null;
+                const candEmpty = resEmpty.data?.[0] ?? null;
+
+                const bestExact =
+                    !candNull
+                        ? candEmpty
+                        : !candEmpty
+                            ? candNull
+                            : Number(candNull.id ?? 0) >= Number(candEmpty.id ?? 0)
+                                ? candNull
+                                : candEmpty;
+
+                if (bestExact?.navlun != null && bestExact?.navlun !== "") {
+                    return bestExact.navlun;
+                }
+
+                const [n1, n2] = await Promise.all([getTekNavlun(v1), getTekNavlun(v2)]);
+                return maxNavlun(n1, n2);
+            }
+
+            return await getTekNavlun(v1);
+        },
+        [supabase, normalizeVarisBase]
+    );
+
+    const fetchUgramaBedeli = useCallback(
+        async (vkn) => {
+            const cleanVkn = normDigits(vkn);
+            if (!cleanVkn) return null;
 
             const { data, error } = await supabase
-                .from("navlun_sartlari")
-                .select("navlun, id")
-                .eq("aktif", true)
-                .ilike("nokta_sayisi", "TEK")
-                .ilike("nokta1", val)
-                .order("id", { ascending: false })
-                .limit(1);
+                .from("ugrama_sartlari")
+                .select("ugrama_bedeli, tedarikci, id")
+                .order("id", { ascending: false });
 
             if (error) {
-                console.error("getTekNavlun error:", error);
+                console.error("fetchUgramaBedeli error:", error);
                 return null;
             }
 
-            return data?.[0]?.navlun ?? null;
-        };
+            const match = (data || []).find((x) => normDigits(x?.tedarikci) === cleanVkn);
 
-        const maxNavlun = (...vals) => {
-            const nums = vals
-                .map((x) => toNumber(x))
-                .filter((x) => x != null);
-
-            if (nums.length === 0) return null;
-            return Math.max(...nums);
-        };
-
-        if (v1 && v2 && v3) {
-            const { data, error } = await supabase
-                .from("navlun_sartlari")
-                .select("navlun, id")
-                .eq("aktif", true)
-                .ilike("nokta_sayisi", "COK")
-                .ilike("nokta1", v1)
-                .ilike("nokta2", v2)
-                .ilike("nokta3", v3)
-                .order("id", { ascending: false })
-                .limit(1);
-
-            if (error) {
-                console.error("fetchNavlunFromSartlari COK(123) error:", error);
-                return null;
-            }
-
-            const exactNav = data?.[0]?.navlun ?? null;
-            if (exactNav != null && exactNav !== "") return exactNav;
-
-            const [n1, n2, n3] = await Promise.all([
-                getTekNavlun(v1),
-                getTekNavlun(v2),
-                getTekNavlun(v3),
-            ]);
-
-            return maxNavlun(n1, n2, n3);
-        }
-
-        if (v1 && v2) {
-            const resNull = await supabase
-                .from("navlun_sartlari")
-                .select("navlun, id")
-                .eq("aktif", true)
-                .ilike("nokta_sayisi", "COK")
-                .ilike("nokta1", v1)
-                .ilike("nokta2", v2)
-                .is("nokta3", null)
-                .order("id", { ascending: false })
-                .limit(1);
-
-            const resEmpty = await supabase
-                .from("navlun_sartlari")
-                .select("navlun, id")
-                .eq("aktif", true)
-                .ilike("nokta_sayisi", "COK")
-                .ilike("nokta1", v1)
-                .ilike("nokta2", v2)
-                .eq("nokta3", "")
-                .order("id", { ascending: false })
-                .limit(1);
-
-            const candNull = resNull.data?.[0] ?? null;
-            const candEmpty = resEmpty.data?.[0] ?? null;
-
-            const bestExact =
-                !candNull ? candEmpty :
-                    !candEmpty ? candNull :
-                        Number(candNull.id ?? 0) >= Number(candEmpty.id ?? 0) ? candNull : candEmpty;
-
-            if (bestExact?.navlun != null && bestExact?.navlun !== "") {
-                return bestExact.navlun;
-            }
-
-            const [n1, n2] = await Promise.all([
-                getTekNavlun(v1),
-                getTekNavlun(v2),
-            ]);
-
-            return maxNavlun(n1, n2);
-        }
-
-        return await getTekNavlun(v1);
-    }, [supabase]);
-
-    const fetchUgramaBedeli = useCallback(async (vkn) => {
-        const cleanVkn = normDigits(vkn);
-        if (!cleanVkn) return null;
-
-        const { data, error } = await supabase
-            .from("ugrama_sartlari")
-            .select("ugrama_bedeli, tedarikci, id")
-            .order("id", { ascending: false });
-
-        if (error) {
-            console.error("fetchUgramaBedeli error:", error);
-            return null;
-        }
-
-        const match = (data || []).find((x) => normDigits(x?.tedarikci) === cleanVkn);
-
-        console.log("UGRAMA MATCH SEARCH:", {
-            inputVkn: vkn,
-            cleanVkn,
-            match,
-            totalRows: (data || []).length,
-        });
-
-        return match?.ugrama_bedeli ?? null;
-    }, [supabase, normDigits]);
+            return match?.ugrama_bedeli ?? null;
+        },
+        [supabase, normDigits]
+    );
 
     const recomputeNavlunForRow = useCallback(
         async (rowId) => {
             const row = rowsRef.current.find((r) => r.id === rowId);
             if (!row) return;
+
+            // ✅ Özel VKN listesi varsa tüm şartları bypass et
+            if (isDirectFiloVkn(row.vkn)) {
+                patchRow(rowId, {
+                    __navlunBase: "FİLO",
+                    navlun: "FİLO",
+                    __datalogerDiscountApplied: false,
+                });
+                return;
+            }
 
             const hasVaris1 = String(row.varis1 ?? "").trim() !== "";
             const hasVaris2 = String(row.varis2 ?? "").trim() !== "";
@@ -752,21 +815,12 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
             if (!hasAnyVaris) return;
 
-            console.log("RECOMPUTE ROW:", row);
-
             let baseNavlun = row.__navlunBase ?? row.navlun ?? "";
 
             const rotaNav = await fetchNavlunFromSartlari({
                 varis1: row.varis1,
                 varis2: row.varis2,
                 varis3: row.varis3,
-            });
-
-            console.log("ROTA NAV:", {
-                varis1: row.varis1,
-                varis2: row.varis2,
-                varis3: row.varis3,
-                rotaNav,
             });
 
             if (rotaNav != null && rotaNav !== "") {
@@ -782,16 +836,25 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
             const cleanRowVkn = normDigits(row.vkn);
 
+            // ✅ Aynı yerin -1 / -2 / -3 varyasyonları tek nokta sayılır
+            const b1 = normalizeVarisBase(row.varis1);
+            const b2 = normalizeVarisBase(row.varis2);
+            const b3 = normalizeVarisBase(row.varis3);
+
+            const uniqueStops = new Set([b1, b2, b3].filter(Boolean));
+            const uniqueStopCount = uniqueStops.size;
+
             if (cleanRowVkn && navlunAfterUgrama != null) {
                 ugramaBedeliRaw = await fetchUgramaBedeli(cleanRowVkn);
                 ugramaBedeli = toNumber(ugramaBedeliRaw);
 
                 if (ugramaBedeli != null) {
-                    if (hasVaris1 && hasVaris2 && hasVaris3) {
-                        navlunAfterUgrama = navlunAfterUgrama + (ugramaBedeli * 2);
-                    } else if (hasVaris1 && hasVaris2) {
+                    if (uniqueStopCount >= 3) {
+                        navlunAfterUgrama = navlunAfterUgrama + ugramaBedeli * 2;
+                    } else if (uniqueStopCount === 2) {
                         navlunAfterUgrama = navlunAfterUgrama + ugramaBedeli;
                     }
+                    // uniqueStopCount === 1 ise uğrama yok
                 }
             }
 
@@ -822,29 +885,23 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 nextApplied = false;
             }
 
-            console.log("UGRAMA DEBUG:", {
-                vkn: row.vkn,
-                cleanRowVkn,
-                hasVaris1,
-                hasVaris2,
-                hasVaris3,
-                rotaNav,
-                baseNavlun,
-                ugramaBedeliRaw,
-                ugramaBedeli,
-                finalBaseNavlun,
-                nextNavlun,
-            });
-
             patchRow(rowId, {
                 __navlunBase: finalBaseNavlun,
                 navlun: nextNavlun,
                 __datalogerDiscountApplied: nextApplied,
             });
         },
-        [fetchNavlunFromSartlari, fetchUgramaBedeli, patchRow, normDigits]
+        [
+            fetchNavlunFromSartlari,
+            fetchUgramaBedeli,
+            patchRow,
+            normDigits,
+            normalizeVarisBase,
+            isDirectFiloVkn,
+        ]
     );
     const recomputeTimersRef = useRef(new Map());
+
     const scheduleRecompute = useCallback(
         (rowId, delay = RECOMPUTE_DELAY_MS) => {
             const m = recomputeTimersRef.current;
@@ -855,7 +912,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             }, delay);
             m.set(rowId, t);
         },
-        [recomputeNavlunForRow, RECOMPUTE_DELAY_MS]
+        [recomputeNavlunForRow]
     );
 
     const initialRecomputeDoneRef = useRef(false);
@@ -868,13 +925,13 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
         const targets = rows
             .filter((r) => String(r?.navlun ?? "").trim() === "" && r?.id != null)
-            .slice(0, 50); // ilk etapta en fazla 50 satır
+            .slice(0, 50);
 
         targets.forEach((r, i) => {
             scheduleRecompute(r.id, i * 150);
         });
     }, [rows, scheduleRecompute]);
-    // ✅ plakalar için O(1) lookup index
+
     const plakaMaps = useMemo(() => {
         const m = {
             cekici: new Map(),
@@ -908,13 +965,110 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         return m;
     }, [plakalar, normPlate, normDigits]);
 
+    const buildDbPayloadFromRow = useCallback(
+        (r, idx) => {
+            const obj = {
+                batch_id: r.__batch_id ?? batchId ?? null,
+                line_no: r.__line_no ?? idx + 1,
+
+                seferno: r.sefer ?? "",
+                sevktarihi: r.sevk ?? "",
+
+                cekici: r.cekici ?? "",
+                dorse: r.dorse ?? "",
+
+                tc: r.tc ?? "",
+                surucu: r.surucu ?? "",
+                telefon: r.tel ?? "",
+                faturavkn: r.vkn ?? "",
+
+                varis1: r.varis1 ?? "",
+                varis2: r.varis2 ?? "",
+                varis3: r.varis3 ?? "",
+
+                datalogerno: r.datalogerno ?? "",
+
+                irsaliyeno: r.irsaliye ?? "",
+                navlun: r.navlun ?? "",
+                teslimattarihsaat: r.teslimat ?? "",
+            };
+
+            if (r.__db_id != null) obj.id = r.__db_id;
+
+            return obj;
+        },
+        [batchId]
+    );
+
+    const saveDirtyRows = useCallback(async () => {
+        if (!perm.ekranYazma || !can(BTN.SAVE)) return;
+        if (autoSaving || saving) return;
+
+        const dirtyIds = Array.from(dirtyRowIdsRef.current);
+        if (dirtyIds.length === 0) return;
+
+        try {
+            setAutoSaving(true);
+
+            const dirtySet = new Set(dirtyIds);
+            const currentRows = rowsRef.current;
+
+            const payload = currentRows
+                .filter((r) => dirtySet.has(r.id))
+                .map((r) => buildDbPayloadFromRow(r, rowIndexRef.current.get(r.id) ?? 0));
+
+            if (payload.length === 0) return;
+
+            const UPSERT_CHUNK = 200;
+            const parts = chunkArray(payload, UPSERT_CHUNK);
+
+            for (const part of parts) {
+                const { error } = await supabase
+                    .from("plaka_atamalar")
+                    .upsert(part, { onConflict: "id" });
+
+                if (error) throw error;
+            }
+
+            dirtyIds.forEach((id) => dirtyRowIdsRef.current.delete(id));
+            setLastAutoSaveAt(new Date());
+        } catch (e) {
+            console.error("autosave error:", e);
+            setSnack({
+                open: true,
+                msg: e?.message || "Otomatik kaydetme hatası",
+                sev: "error",
+            });
+        } finally {
+            setAutoSaving(false);
+        }
+    }, [perm.ekranYazma, can, autoSaving, saving, buildDbPayloadFromRow]);
+
+    const scheduleAutoSave = useCallback(
+        (rowId) => {
+            dirtyRowIdsRef.current.add(rowId);
+
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+
+            autoSaveTimerRef.current = setTimeout(() => {
+                autoSaveTimerRef.current = null;
+                saveDirtyRows();
+            }, AUTO_SAVE_DELAY_MS);
+        },
+        [saveDirtyRows]
+    );
+
     const applyFromPlakaRecord = useCallback(
         (rowId, plakaRec) => {
             const tip = String(plakaRec?.tip ?? "").trim().toUpperCase();
 
             patchRow(rowId, (r) => {
-                const isFilo = tip === "FİLO" || tip === "FILO";
-                const nextNav = isFilo ? "FİLO" : r.navlun ?? "";
+                const nextVkn = plakaRec?.vkn ?? r.vkn ?? "";
+                const isFiloTip = tip === "FİLO" || tip === "FILO";
+                const isFiloByVkn = isDirectFiloVkn(nextVkn);
+                const nextNav = isFiloTip || isFiloByVkn ? "FİLO" : r.navlun ?? "";
 
                 return {
                     cekici: plakaRec?.cekici ?? r.cekici ?? "",
@@ -922,7 +1076,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     tc: plakaRec?.tc_no ?? r.tc ?? "",
                     surucu: plakaRec?.ad_soyad ?? r.surucu ?? "",
                     tel: plakaRec?.telefon ?? r.tel ?? "",
-                    vkn: plakaRec?.vkn ?? r.vkn ?? "",
+                    vkn: nextVkn,
 
                     navlun: nextNav,
                     __navlunBase: nextNav,
@@ -931,15 +1085,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             });
 
             setTimeout(() => recomputeNavlunForRow(rowId), 0);
+            scheduleAutoSave(rowId);
         },
-        [patchRow, recomputeNavlunForRow]
+        [patchRow, recomputeNavlunForRow, scheduleAutoSave, isDirectFiloVkn]
     );
 
     const handleChange = useCallback(
         (id, field, value) => {
             if (!perm.ekranYazma || !can(BTN.ROW_EDIT)) return;
 
-            // ✅ kolon yetkisi varsa, sadece duzenleyebilir:true ise izin ver
             if (colPerms && Object.prototype.hasOwnProperty.call(colPerms, field)) {
                 if (colPerms[field]?.duzenleyebilir !== true) return;
             }
@@ -959,15 +1113,21 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 if (field === "tel") rec = plakaMaps.tel.get(normDigits(value)) || null;
                 if (field === "vkn") rec = plakaMaps.vkn.get(normDigits(value)) || null;
 
-                if (rec) applyFromPlakaRecord(id, rec);
+                if (rec) {
+                    applyFromPlakaRecord(id, rec);
+                    return;
+                }
             }
 
             if (["varis1", "varis2", "varis3", "datalogerno", "vkn"].includes(field)) {
                 scheduleRecompute(id, RECOMPUTE_DELAY_MS);
             }
+
             if (field === "navlun") {
                 scheduleNavlunDiscount(id, NAVLUN_TYPING_DELAY_MS);
             }
+
+            scheduleAutoSave(id);
         },
         [
             perm.ekranYazma,
@@ -981,9 +1141,20 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             applyFromPlakaRecord,
             scheduleRecompute,
             scheduleNavlunDiscount,
-            RECOMPUTE_DELAY_MS,
+            scheduleAutoSave,
         ]
     );
+
+    useEffect(() => {
+        return () => {
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+
+            recomputeTimersRef.current.forEach((t) => clearTimeout(t));
+            recomputeTimersRef.current.clear();
+        };
+    }, []);
 
     const selectedRow = useMemo(() => rows.find((r) => r.id === selectedRowId) || null, [rows, selectedRowId]);
 
@@ -1019,11 +1190,10 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             if (filterMissingPlate && String(r.tc || "").trim() !== "") return false;
             if (!query) return true;
 
-            return SEARCH_KEYS.some((key) =>
-                String(r[key] ?? "").toLowerCase().includes(query)
-            );
+            return SEARCH_KEYS.some((key) => String(r[key] ?? "").toLowerCase().includes(query));
         });
     }, [rows, qDeb, filterMissingPlate]);
+
     // =========================
     // ✅ SEÇİM (CHECKBOX)
     // =========================
@@ -1046,6 +1216,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             return next;
         });
     }, []);
+
     const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
     const allSelected = filteredRows.length > 0 && selectedIds.size === filteredRows.length;
@@ -1097,7 +1268,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             const forcedListboxFields = ["cekici", "surucu", "vkn"];
             const isForcedListboxField = forcedListboxFields.includes(String(field).trim());
 
-            // sadece zorunlu listbox alanı değilse edit yetkisi kontrol et
             if (!isForcedListboxField && colPerms && Object.prototype.hasOwnProperty.call(colPerms, field)) {
                 if (colPerms[field]?.duzenleyebilir !== true) return;
             }
@@ -1107,6 +1277,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         },
         [can, ensurePlakalarLoaded, colPerms]
     );
+
     const closeListbox = () => setLb({ open: false, anchorEl: null, rowId: null, field: null, query: "" });
 
     const plakaIndex = useMemo(() => {
@@ -1153,19 +1324,63 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     }, [plakalar]);
 
     const debouncedLbQuery = useDebouncedValue(lb.query, 120);
-    const LISTBOX_LIMIT = 300;
 
-    const listboxOptions = useMemo(() => {
-        if (!lb.open || !lb.field) return [];
+    // ✅ İlk açılışta ekranda gösterilecek kayıt
+    const LISTBOX_INITIAL_LIMIT = 300;
+    // ✅ Arama yapıldığında ekranda gösterilecek max sonuç
+    const LISTBOX_SEARCH_LIMIT = 300;
+
+    const listboxSearchResult = useMemo(() => {
+        if (!lb.open || !lb.field) return { options: [], totalMatches: 0 };
+
         const key = fieldToPlakaKey(lb.field);
-        if (!key) return [];
+        if (!key) return { options: [], totalMatches: 0 };
 
         const base = plakaIndex[key] || [];
-        const qx = (debouncedLbQuery || "").trim().toLowerCase();
+        const rawQuery = String(debouncedLbQuery || "").trim();
 
-        const filtered = !qx ? base : base.filter((v) => String(v).toLowerCase().includes(qx));
-        return filtered.slice(0, LISTBOX_LIMIT);
-    }, [lb.open, lb.field, debouncedLbQuery, plakaIndex]);
+        // İlk açılışta performans için sadece ilk 300 kayıt
+        if (!rawQuery) {
+            return {
+                options: base.slice(0, LISTBOX_INITIAL_LIMIT),
+                totalMatches: base.length,
+            };
+        }
+
+        // Arama yazılınca TÜM kayıtlarda ara
+        const qNorm = normalizeSearchText(rawQuery);
+
+        const exact = [];
+        const startsWith = [];
+        const includes = [];
+
+        for (const val of base) {
+            const rawVal = String(val ?? "").trim();
+            if (!rawVal) continue;
+
+            const valNorm = normalizeSearchText(rawVal);
+
+            if (!valNorm.includes(qNorm)) continue;
+
+            if (valNorm === qNorm) {
+                exact.push(rawVal);
+            } else if (valNorm.startsWith(qNorm)) {
+                startsWith.push(rawVal);
+            } else {
+                includes.push(rawVal);
+            }
+        }
+
+        const allMatches = [...exact, ...startsWith, ...includes];
+
+        return {
+            options: allMatches.slice(0, LISTBOX_SEARCH_LIMIT),
+            totalMatches: allMatches.length,
+        };
+    }, [lb.open, lb.field, debouncedLbQuery, plakaIndex, normalizeSearchText]);
+
+    const listboxOptions = listboxSearchResult.options;
+    const listboxTotalMatches = listboxSearchResult.totalMatches;
 
     const onPickListValue = useCallback(
         (pickedValue) => {
@@ -1231,39 +1446,17 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     const onSave = useCallback(async () => {
         if (!can(BTN.SAVE) || !perm.ekranYazma) return;
 
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+        }
+
         try {
             setSaving(true);
 
-            const payload = rows.map((r, idx) => {
-                const obj = {
-                    batch_id: r.__batch_id ?? batchId ?? null,
-                    line_no: r.__line_no ?? idx + 1,
-
-                    seferno: r.sefer ?? "",
-                    sevktarihi: r.sevk ?? "",
-
-                    cekici: r.cekici ?? "",
-                    dorse: r.dorse ?? "",
-
-                    tc: r.tc ?? "",
-                    surucu: r.surucu ?? "",
-                    telefon: r.tel ?? "",
-                    faturavkn: r.vkn ?? "",
-
-                    varis1: r.varis1 ?? "",
-                    varis2: r.varis2 ?? "",
-                    varis3: r.varis3 ?? "",
-
-                    datalogerno: r.datalogerno ?? "",
-
-                    irsaliyeno: r.irsaliye ?? "",
-                    navlun: r.navlun ?? "",
-                    teslimattarihsaat: r.teslimat ?? "",
-                };
-
-                if (r.__db_id != null) obj.id = r.__db_id;
-                return obj;
-            });
+            const payload = rows.map((r) =>
+                buildDbPayloadFromRow(r, rowIndexRef.current.get(r.id) ?? 0)
+            );
 
             const UPSERT_CHUNK = 500;
             const parts = chunkArray(payload, UPSERT_CHUNK);
@@ -1277,6 +1470,9 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 }
             }
 
+            dirtyRowIdsRef.current.clear();
+            setLastAutoSaveAt(new Date());
+
             setSnack({ open: true, msg: "Kaydedildi ✅", sev: "success" });
             await fetchRows();
         } catch (e) {
@@ -1285,45 +1481,222 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         } finally {
             setSaving(false);
         }
-    }, [can, perm.ekranYazma, rows, batchId, fetchRows]);
+    }, [can, perm.ekranYazma, rows, fetchRows, buildDbPayloadFromRow]);
 
-    const onExport = useCallback(() => {
+    const onExport = useCallback(async () => {
         if (!can(BTN.EXPORT)) return;
 
         try {
-            const exportRows = filteredRows.map((r) => ({
-                Sefer: r.sefer,
-                Sevk: r.sevk,
-                Cekici: r.cekici,
-                Dorse: r.dorse,
-                TC: r.tc,
-                Surucu: r.surucu,
-                Telefon: r.tel,
-                VKN: r.vkn,
-                Varis1: r.varis1,
-                Varis2: r.varis2,
-                Varis3: r.varis3,
-                DatalogerNo: r.datalogerno,
-                IrsaliyeNo: r.irsaliye,
-                Navlun: r.navlun,
-                Teslimat: r.teslimat,
-                Guncellendi: r.guncellendi,
-            }));
+            const workbook = new ExcelJS.Workbook();
+            workbook.creator = "Bapsis";
+            workbook.lastModifiedBy = "Bapsis";
+            workbook.created = new Date();
+            workbook.modified = new Date();
 
-            const ws = XLSX.utils.json_to_sheet(exportRows);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "PlakaAtama");
+            const worksheet = workbook.addWorksheet("Plaka Atama", {
+                views: [{ state: "frozen", ySplit: 1 }],
+            });
 
+            const headers = [
+                { header: "Sefer", key: "sefer", width: 14 },
+                { header: "Sevk Tarihi", key: "sevk", width: 16 },
+                { header: "Çekici", key: "cekici", width: 16 },
+                { header: "Dorse", key: "dorse", width: 16 },
+                { header: "TC", key: "tc", width: 16 },
+                { header: "Sürücü", key: "surucu", width: 24 },
+                { header: "Telefon", key: "tel", width: 18 },
+                { header: "VKN", key: "vkn", width: 18 },
+                { header: "Varış 1", key: "varis1", width: 22 },
+                { header: "Varış 2", key: "varis2", width: 22 },
+                { header: "Varış 3", key: "varis3", width: 22 },
+                { header: "Dataloger No", key: "datalogerno", width: 18 },
+                { header: "İrsaliye No", key: "irsaliye", width: 18 },
+                { header: "Navlun", key: "navlun", width: 14 },
+                { header: "Teslimat", key: "teslimat", width: 22 },
+                { header: "Güncellendi", key: "guncellendi", width: 22 },
+            ];
+
+            worksheet.columns = headers;
+
+            // Başlık satırı
+            const headerRow = worksheet.getRow(1);
+            headerRow.height = 24;
+
+            headerRow.eachCell((cell) => {
+                cell.font = {
+                    bold: true,
+                    color: { argb: "FFFFFFFF" },
+                    size: 11,
+                };
+                cell.alignment = {
+                    vertical: "middle",
+                    horizontal: "center",
+                };
+                cell.fill = {
+                    type: "pattern",
+                    pattern: "solid",
+                    fgColor: { argb: "FF0F172A" }, // koyu lacivert
+                };
+                cell.border = {
+                    top: { style: "thin", color: { argb: "FF334155" } },
+                    left: { style: "thin", color: { argb: "FF334155" } },
+                    bottom: { style: "thin", color: { argb: "FF334155" } },
+                    right: { style: "thin", color: { argb: "FF334155" } },
+                };
+            });
+
+            // Veri satırları
+            filteredRows.forEach((r) => {
+                worksheet.addRow({
+                    sefer: r.sefer ?? "",
+                    sevk: r.sevk ?? "",
+                    cekici: r.cekici ?? "",
+                    dorse: r.dorse ?? "",
+                    tc: r.tc ?? "",
+                    surucu: r.surucu ?? "",
+                    tel: r.tel ?? "",
+                    vkn: r.vkn ?? "",
+                    varis1: r.varis1 ?? "",
+                    varis2: r.varis2 ?? "",
+                    varis3: r.varis3 ?? "",
+                    datalogerno: r.datalogerno ?? "",
+                    irsaliye: r.irsaliye ?? "",
+                    navlun: r.navlun ?? "",
+                    teslimat: r.teslimat ?? "",
+                    guncellendi: r.guncellendi ?? "",
+                });
+            });
+
+            // Tüm satırlara stil
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber === 1) return;
+
+                row.height = 22;
+
+                row.eachCell((cell, colNumber) => {
+                    cell.alignment = {
+                        vertical: "middle",
+                        horizontal: colNumber === 14 ? "right" : "left",
+                    };
+
+                    cell.border = {
+                        top: { style: "thin", color: { argb: "FFE2E8F0" } },
+                        left: { style: "thin", color: { argb: "FFE2E8F0" } },
+                        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+                        right: { style: "thin", color: { argb: "FFE2E8F0" } },
+                    };
+
+                    cell.fill = {
+                        type: "pattern",
+                        pattern: "solid",
+                        fgColor: {
+                            argb: rowNumber % 2 === 0 ? "FFF8FAFC" : "FFFFFFFF",
+                        },
+                    };
+
+                    cell.font = {
+                        size: 10,
+                        color: { argb: "FF0F172A" },
+                    };
+                });
+
+                // Navlun kolonunu sayısal görünüm yap
+                const navlunCell = row.getCell(14);
+                const navlunNum = Number(String(row.getCell(14).value ?? "").replace(",", "."));
+                if (!Number.isNaN(navlunNum) && String(row.getCell(14).value ?? "").trim() !== "") {
+                    navlunCell.value = navlunNum;
+                    navlunCell.numFmt = '#,##0.00';
+                    navlunCell.font = {
+                        bold: true,
+                        size: 10,
+                        color: { argb: "FF0F172A" },
+                    };
+                }
+
+                // Eksik TC varsa hafif kırmızı vurgula
+                const tcVal = String(row.getCell(5).value ?? "").trim();
+                if (!tcVal) {
+                    row.eachCell((cell) => {
+                        cell.fill = {
+                            type: "pattern",
+                            pattern: "solid",
+                            fgColor: { argb: "FFFEF2F2" },
+                        };
+                    });
+                }
+            });
+
+            // AutoFilter
+            worksheet.autoFilter = {
+                from: "A1",
+                to: "P1",
+            };
+
+            // Üst bilgi bölümü
+            worksheet.insertRow(1, []);
+            worksheet.mergeCells("A1:P1");
+            const titleCell = worksheet.getCell("A1");
+            titleCell.value = "PLAKA ATAMA RAPORU";
+            titleCell.font = {
+                bold: true,
+                size: 15,
+                color: { argb: "FF0F172A" },
+            };
+            titleCell.alignment = {
+                vertical: "middle",
+                horizontal: "left",
+            };
+            titleCell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFE2E8F0" },
+            };
+            worksheet.getRow(1).height = 26;
+
+            // Header artık 2. satırda
+            const newHeaderRow = worksheet.getRow(2);
+            newHeaderRow.height = 24;
+            newHeaderRow.eachCell((cell) => {
+                cell.font = {
+                    bold: true,
+                    color: { argb: "FFFFFFFF" },
+                    size: 11,
+                };
+                cell.alignment = {
+                    vertical: "middle",
+                    horizontal: "center",
+                };
+                cell.fill = {
+                    type: "pattern",
+                    pattern: "solid",
+                    fgColor: { argb: "FF0F172A" },
+                };
+                cell.border = {
+                    top: { style: "thin", color: { argb: "FF334155" } },
+                    left: { style: "thin", color: { argb: "FF334155" } },
+                    bottom: { style: "thin", color: { argb: "FF334155" } },
+                    right: { style: "thin", color: { argb: "FF334155" } },
+                };
+            });
+
+            worksheet.views = [{ state: "frozen", ySplit: 2 }];
+
+            const buffer = await workbook.xlsx.writeBuffer();
             const fileName = `plaka-atama_${batchId || "tum"}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-            XLSX.writeFile(wb, fileName);
 
-            setSnack({ open: true, msg: "Excel indirildi ✅", sev: "success" });
+            saveAs(
+                new Blob([buffer], {
+                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                }),
+                fileName
+            );
+
+            setSnack({ open: true, msg: "Excel modern formatta indirildi ✅", sev: "success" });
         } catch (e) {
             console.error("onExport error:", e);
             setSnack({ open: true, msg: e?.message || "Excel dışa aktarma hatası", sev: "error" });
         }
     }, [can, filteredRows, batchId]);
-
     const onCompleteSelected = useCallback(async () => {
         if (!can(BTN.COMPLETE_SELECTED) || !perm.ekranYazma) return;
 
@@ -1456,15 +1829,26 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         }
     }, [can, perm.ekranYazma, selectedIds, selectedRows, clearSelection, fetchRows]);
 
-    /* =========================
-       ✅ PERMISSION LOADING / NO ACCESS UI
-    ========================= */
     if (permLoading) {
         return (
-            <Box sx={{ ...s.page, alignItems: "center", justifyContent: "center" }}>
+            <Box
+                sx={{
+                    ...s.page,
+                    height: "100%",
+                    maxHeight: "100%",
+                    minHeight: 0,
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                }}
+            >
                 <Stack spacing={1} alignItems="center">
                     <CircularProgress size={28} />
-                    <Typography sx={{ color: "rgba(255,255,255,0.65)", fontSize: 13 }}>Yetkiler yükleniyor…</Typography>
+                    <Typography sx={{ color: "rgba(255,255,255,0.65)", fontSize: 13 }}>
+                        Yetkiler yükleniyor…
+                    </Typography>
                 </Stack>
             </Box>
         );
@@ -1472,10 +1856,27 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
     if (!perm.ekranGorunur) {
         return (
-            <Box sx={{ ...s.page, alignItems: "center", justifyContent: "center" }}>
-                <Stack spacing={1.2} alignItems="center" sx={{ p: 3, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3 }}>
+            <Box
+                sx={{
+                    ...s.page,
+                    height: "100vh",
+                    maxHeight: "100vh",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                }}
+            >
+                <Stack
+                    spacing={1.2}
+                    alignItems="center"
+                    sx={{ p: 3, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3 }}
+                >
                     <Typography sx={{ color: "#fff", fontWeight: 900, fontSize: 18 }}>Erişim Yok</Typography>
-                    <Typography sx={{ color: "rgba(255,255,255,0.65)", fontSize: 13, textAlign: "center", maxWidth: 420 }}>
+                    <Typography
+                        sx={{ color: "rgba(255,255,255,0.65)", fontSize: 13, textAlign: "center", maxWidth: 420 }}
+                    >
                         Bu ekrana erişim yetkiniz bulunmuyor. Yönetici panelinden “Plaka Atama” ekran izni verilmelidir.
                     </Typography>
                 </Stack>
@@ -1484,9 +1885,26 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     }
 
     return (
-        <Box sx={s.page}>
+        <Box
+            sx={{
+                ...s.page,
+                height: "100vh",
+                maxHeight: "100vh",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+            }}
+        >
             {/* HEADER */}
-            <Box sx={s.hero}>
+            <Box
+                sx={{
+                    ...s.hero,
+                    py: 1.25,
+                    px: 1.5,
+                    mb: 1,
+                    flexShrink: 0,
+                }}
+            >
                 <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
                     <Box sx={s.brandDot} />
                     <Typography sx={s.heroKicker}>LOGISTICS ENGINE • v5</Typography>
@@ -1496,18 +1914,33 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     {plakaLoading ? (
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 1 }}>
                             <CircularProgress size={14} />
-                            <Typography sx={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>Plakalar yükleniyor…</Typography>
+                            <Typography sx={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
+                                Plakalar yükleniyor…
+                            </Typography>
                         </Stack>
                     ) : null}
                 </Stack>
 
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-end">
                     <Box>
-                        <Typography sx={s.heroTitle}>Plaka Atama</Typography>
-                        <Typography sx={s.heroSub}>Operasyonel verileri tek ekrandan güncelleyin.</Typography>
+                        <Typography sx={{ ...s.heroTitle, fontSize: 24, lineHeight: 1.1 }}>
+                            Plaka Atama
+                        </Typography>
+                        <Typography sx={{ ...s.heroSub, fontSize: 12, mt: 0.25 }}>
+                            Operasyonel verileri tek ekrandan güncelleyin.
+                        </Typography>
                     </Box>
 
-                    <Stack direction="row" spacing={2} sx={{ mb: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{
+                            mb: 0.5,
+                            flexWrap: "wrap",
+                            justifyContent: "flex-end",
+                            rowGap: 1,
+                        }}
+                    >
                         {can(BTN.COMPLETE_SELECTED) ? (
                             <Button
                                 startIcon={<DoneAllIcon />}
@@ -1531,7 +1964,12 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         ) : null}
 
                         {can(BTN.REFRESH) ? (
-                            <Button startIcon={<RefreshIcon />} sx={s.secondaryBtn} onClick={fetchRows} disabled={loading || saving}>
+                            <Button
+                                startIcon={<RefreshIcon />}
+                                sx={s.secondaryBtn}
+                                onClick={fetchRows}
+                                disabled={loading || saving}
+                            >
                                 {loading ? "Yenileniyor..." : "Yenile"}
                             </Button>
                         ) : null}
@@ -1563,10 +2001,25 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             </Box>
 
             {/* SEARCH + FILTERS */}
-            <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: "center", flexWrap: "wrap", flexShrink: 0 }}>
+            <Stack
+                direction="row"
+                spacing={1}
+                sx={{
+                    mb: 1,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    flexShrink: 0,
+                    rowGap: 1,
+                }}
+            >
                 <Box sx={s.search}>
                     <SearchIcon sx={{ color: "#3b82f6", fontSize: 20 }} />
-                    <InputBase placeholder="Hızlı ara..." sx={s.searchInput} value={q} onChange={(e) => setQ(e.target.value)} />
+                    <InputBase
+                        placeholder="Hızlı ara..."
+                        sx={s.searchInput}
+                        value={q}
+                        onChange={(e) => setQ(e.target.value)}
+                    />
                 </Box>
 
                 <Chip icon={<TimelineIcon />} label="Canlı Akış" sx={s.pillActive} />
@@ -1578,7 +2031,12 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 />
 
                 {selectedIds.size > 0 ? (
-                    <Chip label={`Seçili: ${selectedIds.size}`} sx={s.pillActive} onDelete={clearSelection} deleteIcon={<ClearIcon />} />
+                    <Chip
+                        label={`Seçili: ${selectedIds.size}`}
+                        sx={s.pillActive}
+                        onDelete={clearSelection}
+                        deleteIcon={<ClearIcon />}
+                    />
                 ) : null}
 
                 {loading ? (
@@ -1588,11 +2046,22 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     </Stack>
                 ) : null}
 
-                {!perm.ekranYazma ? (
-                    <Chip label="Sadece Görüntüleme" sx={{ ...s.pill, borderColor: "rgba(248,113,113,0.5)", color: "#fca5a5" }} />
+                {autoSaving ? (
+                    <Chip label="Otomatik kaydediliyor..." sx={s.pillActive} />
+                ) : lastAutoSaveAt ? (
+                    <Chip
+                        label={`Otomatik kaydedildi: ${lastAutoSaveAt.toLocaleTimeString("tr-TR")}`}
+                        sx={s.pill}
+                    />
                 ) : null}
 
-                {/* Debug */}
+                {!perm.ekranYazma ? (
+                    <Chip
+                        label="Sadece Görüntüleme"
+                        sx={{ ...s.pill, borderColor: "rgba(248,113,113,0.5)", color: "#fca5a5" }}
+                    />
+                ) : null}
+
                 {(!colPerms || Object.keys(colPerms).length === 0) && (
                     <Chip
                         label={`Kolon izinleri yok (grid:${gridId || "?"})`}
@@ -1604,7 +2073,17 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             {!!loadErr ? <Typography sx={{ color: "#f87171", mb: 2, flexShrink: 0 }}>{loadErr}</Typography> : null}
 
             {/* GRID */}
-            <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
+            <Box
+                sx={{
+                    flex: "1 1 auto",
+                    height: "72vh",
+                    minHeight: 500,
+                    maxHeight: "74vh",
+                    overflow: "hidden",
+                    display: "flex",
+                    pb: 2,
+                }}
+            >
                 <PlakaAtamaGrid
                     rows={filteredRows}
                     columns={columns}
@@ -1625,6 +2104,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     editableColumnKeys={editableColumnKeys}
                 />
             </Box>
+
             {/* LISTBOX POPOVER */}
             <Popover
                 open={lb.open}
@@ -1647,7 +2127,9 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     </Stack>
 
                     <Typography sx={{ mt: 0.8, color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
-                        Toplam: {listboxOptions.length}
+                        {String(lb.query || "").trim()
+                            ? `Eşleşen: ${listboxTotalMatches} • Gösterilen: ${listboxOptions.length}`
+                            : `Toplam: ${listboxTotalMatches} • Gösterilen: ${listboxOptions.length}`}
                     </Typography>
                 </Box>
 
@@ -1697,7 +2179,9 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         tc: tgt.tc_no ?? "",
                     });
 
-                    setSnack({ open: true, msg: "Şoför bilgisi güncellendi ✅ (Kaydet'e basmayı unutma)", sev: "success" });
+                    scheduleAutoSave(swapDlg.rowId);
+
+                    setSnack({ open: true, msg: "Şoför bilgisi güncellendi ✅", sev: "success" });
                     setSwapDlg({ open: false, rowId: null, query: "", targetPlakaId: null, sourcePlaka: null });
                 }}
             />

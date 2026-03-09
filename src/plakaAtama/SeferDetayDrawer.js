@@ -49,10 +49,15 @@ const Section = ({ title, subtitle, icon, children, sx }) => (
             >
                 {icon}
             </Box>
+
             <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>{title}</Typography>
+                <Typography sx={{ fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>
+                    {title}
+                </Typography>
                 {subtitle ? (
-                    <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.62)" }}>{subtitle}</Typography>
+                    <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.62)" }}>
+                        {subtitle}
+                    </Typography>
                 ) : null}
             </Box>
         </Stack>
@@ -68,8 +73,6 @@ export default function SeferDetayDrawer({
     s,
     openListbox,
     handleChange,
-
-    // ✅ YENİ
     canEdit = true,
 }) {
     const [savedOpen, setSavedOpen] = React.useState(false);
@@ -88,6 +91,12 @@ export default function SeferDetayDrawer({
         },
         "& .MuiInputLabel-root": { color: "rgba(255,255,255,0.65)" },
         "& .MuiInputBase-input": { color: "rgba(255,255,255,0.92)" },
+        "& .MuiInputBase-input.Mui-disabled": {
+            WebkitTextFillColor: "rgba(255,255,255,0.72)",
+        },
+        "& .MuiSvgIcon-root": {
+            color: "rgba(255,255,255,0.75)",
+        },
     });
 
     const handleSave = async () => {
@@ -119,8 +128,12 @@ export default function SeferDetayDrawer({
                 sx: {
                     ...(s?.drawerPaper || {}),
                     width: { xs: "100%", sm: 520 },
+                    maxWidth: "100vw",
                     borderRadius: { xs: 0, sm: "18px 0 0 18px" },
                     overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
                     background:
                         "radial-gradient(1200px 600px at 20% 0%, rgba(120,160,255,0.18), transparent 50%)," +
                         "linear-gradient(180deg, rgba(18,20,26,0.96), rgba(14,16,22,0.96))",
@@ -137,15 +150,25 @@ export default function SeferDetayDrawer({
                     px: 2,
                     pt: 2,
                     pb: 1.5,
+                    flexShrink: 0,
                     backdropFilter: "blur(12px)",
-                    background: "rgba(10,12,18,0.70)",
+                    background: "rgba(10,12,18,0.78)",
                     borderBottom: "1px solid rgba(255,255,255,0.08)",
                 }}
             >
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Box sx={{ minWidth: 0 }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                            <Typography sx={{ fontSize: 16, fontWeight: 800, letterSpacing: 0.2 }}>Sefer Detayı</Typography>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+                            <Typography
+                                sx={{
+                                    fontSize: 16,
+                                    fontWeight: 800,
+                                    letterSpacing: 0.2,
+                                    color: "#fff",
+                                }}
+                            >
+                                Sefer Detayı
+                            </Typography>
 
                             <Chip
                                 size="small"
@@ -159,6 +182,7 @@ export default function SeferDetayDrawer({
                                     border: "1px solid rgba(120,160,255,0.22)",
                                 }}
                             />
+
                             {!canEdit ? (
                                 <Chip
                                     size="small"
@@ -175,7 +199,12 @@ export default function SeferDetayDrawer({
                             ) : null}
                         </Stack>
 
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.9, flexWrap: "wrap" }}>
+                        <Stack
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                            sx={{ mt: 0.9, flexWrap: "wrap", rowGap: 1 }}
+                        >
                             <Chip
                                 size="small"
                                 label={row?.tc ? `TC: ${row.tc}` : "TC: -"}
@@ -208,8 +237,10 @@ export default function SeferDetayDrawer({
                                 width: 40,
                                 height: 40,
                                 borderRadius: 2,
+                                flexShrink: 0,
                                 background: "rgba(255,255,255,0.06)",
                                 border: "1px solid rgba(255,255,255,0.10)",
+                                color: "#fff",
                                 "&:hover": { background: "rgba(255,255,255,0.10)" },
                             }}
                         >
@@ -219,7 +250,33 @@ export default function SeferDetayDrawer({
                 </Stack>
             </Box>
 
-            <Box sx={{ p: 2.2, pb: 10 }}>
+            {/* Scrollable Content */}
+            <Box
+                sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                    p: 2.2,
+                    pb: 2,
+                    pr: 1.4,
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "rgba(255,255,255,0.18) transparent",
+                    "&::-webkit-scrollbar": {
+                        width: 8,
+                    },
+                    "&::-webkit-scrollbar-track": {
+                        background: "transparent",
+                    },
+                    "&::-webkit-scrollbar-thumb": {
+                        background: "rgba(255,255,255,0.16)",
+                        borderRadius: 999,
+                    },
+                    "&::-webkit-scrollbar-thumb:hover": {
+                        background: "rgba(255,255,255,0.24)",
+                    },
+                }}
+            >
                 {!row ? (
                     <Box
                         sx={{
@@ -229,7 +286,9 @@ export default function SeferDetayDrawer({
                             background: "rgba(255,255,255,0.04)",
                         }}
                     >
-                        <Typography sx={{ color: "rgba(255,255,255,0.70)" }}>Bir satır seçin.</Typography>
+                        <Typography sx={{ color: "rgba(255,255,255,0.70)" }}>
+                            Bir satır seçin.
+                        </Typography>
                     </Box>
                 ) : (
                     <>
@@ -239,31 +298,87 @@ export default function SeferDetayDrawer({
                                 p: 2.2,
                                 borderRadius: 3,
                                 border: "1px solid rgba(255,255,255,0.10)",
-                                background: "linear-gradient(135deg, rgba(120,160,255,0.16), rgba(255,255,255,0.04))",
+                                background:
+                                    "linear-gradient(135deg, rgba(120,160,255,0.16), rgba(255,255,255,0.04))",
                                 backdropFilter: "blur(10px)",
                                 boxShadow: "0 16px 40px rgba(0,0,0,0.30)",
                             }}
                         >
-                            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
-                                <Box sx={{ minWidth: 0 }}>
-                                    <Typography sx={{ fontSize: 18, fontWeight: 900 }} noWrap>
+                            <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                justifyContent="space-between"
+                                alignItems={{ xs: "flex-start", sm: "flex-start" }}
+                                spacing={2}
+                            >
+                                <Box sx={{ minWidth: 0, width: "100%" }}>
+                                    <Typography
+                                        sx={{
+                                            fontSize: 18,
+                                            fontWeight: 900,
+                                            color: "#fff",
+                                            wordBreak: "break-word",
+                                        }}
+                                    >
                                         {row.sefer || "Sefer"}
                                     </Typography>
-                                    <Typography sx={{ mt: 0.3, fontSize: 13, color: "rgba(255,255,255,0.70)" }} noWrap>
+
+                                    <Typography
+                                        sx={{
+                                            mt: 0.3,
+                                            fontSize: 13,
+                                            color: "rgba(255,255,255,0.70)",
+                                            wordBreak: "break-word",
+                                        }}
+                                    >
                                         {row.sevk ? `Sevk: ${row.sevk}` : "Sevk: -"}
                                     </Typography>
 
-                                    <Stack direction="row" spacing={1} sx={{ mt: 1.2, flexWrap: "wrap" }}>
-                                        <Chip size="small" label={`Çekici: ${row.cekici || "-"}`} sx={{ borderRadius: 999 }} />
-                                        <Chip size="small" label={`Dorse: ${row.dorse || "-"}`} sx={{ borderRadius: 999 }} />
-                                        <Chip size="small" label={`TC: ${row.tc || "-"}`} sx={{ borderRadius: 999 }} />
+                                    <Stack direction="row" spacing={1} sx={{ mt: 1.2, flexWrap: "wrap", rowGap: 1 }}>
+                                        <Chip
+                                            size="small"
+                                            label={`Çekici: ${row.cekici || "-"}`}
+                                            sx={{ borderRadius: 999 }}
+                                        />
+                                        <Chip
+                                            size="small"
+                                            label={`Dorse: ${row.dorse || "-"}`}
+                                            sx={{ borderRadius: 999 }}
+                                        />
+                                        <Chip
+                                            size="small"
+                                            label={`TC: ${row.tc || "-"}`}
+                                            sx={{ borderRadius: 999 }}
+                                        />
                                     </Stack>
                                 </Box>
 
-                                <Box sx={{ textAlign: "right" }}>
-                                    <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>Sürücü</Typography>
-                                    <Typography sx={{ fontWeight: 800 }}>{row.surucu || "-"}</Typography>
-                                    <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.70)" }}>{row.tel || "-"}</Typography>
+                                <Box
+                                    sx={{
+                                        textAlign: { xs: "left", sm: "right" },
+                                        minWidth: { xs: "100%", sm: 140 },
+                                    }}
+                                >
+                                    <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
+                                        Sürücü
+                                    </Typography>
+                                    <Typography
+                                        sx={{
+                                            fontWeight: 800,
+                                            color: "#fff",
+                                            wordBreak: "break-word",
+                                        }}
+                                    >
+                                        {row.surucu || "-"}
+                                    </Typography>
+                                    <Typography
+                                        sx={{
+                                            fontSize: 12.5,
+                                            color: "rgba(255,255,255,0.70)",
+                                            wordBreak: "break-word",
+                                        }}
+                                    >
+                                        {row.tel || "-"}
+                                    </Typography>
                                 </Box>
                             </Stack>
                         </Box>
@@ -275,7 +390,13 @@ export default function SeferDetayDrawer({
                                 subtitle="Araç ve sürücü bilgilerini seçerek güncelleyin."
                                 icon={<LocalShippingOutlinedIcon fontSize="small" />}
                             >
-                                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.4 }}>
+                                <Box
+                                    sx={{
+                                        display: "grid",
+                                        gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                                        gap: 1.4,
+                                    }}
+                                >
                                     <TextField
                                         fullWidth
                                         label="Çekici"
@@ -285,7 +406,9 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "cekici")}
                                         sx={selectFieldSx(canEdit)}
@@ -301,7 +424,9 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "dorse")}
                                         sx={selectFieldSx(canEdit)}
@@ -317,7 +442,9 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "surucu")}
                                         sx={selectFieldSx(canEdit)}
@@ -333,7 +460,9 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "tel")}
                                         sx={selectFieldSx(canEdit)}
@@ -349,7 +478,9 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "tc")}
                                         sx={selectFieldSx(canEdit)}
@@ -365,7 +496,9 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "vkn")}
                                         sx={selectFieldSx(canEdit)}
@@ -375,8 +508,18 @@ export default function SeferDetayDrawer({
                             </Section>
 
                             {/* Varışlar */}
-                            <Section title="Varışlar" subtitle="Teslimat noktalarını düzenleyin." icon={<PlaceOutlinedIcon fontSize="small" />}>
-                                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.4 }}>
+                            <Section
+                                title="Varışlar"
+                                subtitle="Teslimat noktalarını düzenleyin."
+                                icon={<PlaceOutlinedIcon fontSize="small" />}
+                            >
+                                <Box
+                                    sx={{
+                                        display: "grid",
+                                        gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                                        gap: 1.4,
+                                    }}
+                                >
                                     <TextField
                                         fullWidth
                                         label="Varış 1"
@@ -388,6 +531,7 @@ export default function SeferDetayDrawer({
                                         sx={selectFieldSx(false)}
                                         disabled={!canEdit}
                                     />
+
                                     <TextField
                                         fullWidth
                                         label="Varış 2"
@@ -399,6 +543,7 @@ export default function SeferDetayDrawer({
                                         sx={selectFieldSx(false)}
                                         disabled={!canEdit}
                                     />
+
                                     <TextField
                                         fullWidth
                                         label="Varış 3"
@@ -414,8 +559,18 @@ export default function SeferDetayDrawer({
                             </Section>
 
                             {/* Evrak & Ücret */}
-                            <Section title="Evrak & Ücret" subtitle="İrsaliye, navlun ve teslimat bilgileri." icon={<ReceiptLongOutlinedIcon fontSize="small" />}>
-                                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.4 }}>
+                            <Section
+                                title="Evrak & Ücret"
+                                subtitle="İrsaliye, navlun ve teslimat bilgileri."
+                                icon={<ReceiptLongOutlinedIcon fontSize="small" />}
+                            >
+                                <Box
+                                    sx={{
+                                        display: "grid",
+                                        gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                                        gap: 1.4,
+                                    }}
+                                >
                                     <TextField
                                         fullWidth
                                         label="İrsaliye"
@@ -427,6 +582,7 @@ export default function SeferDetayDrawer({
                                         sx={selectFieldSx(false)}
                                         disabled={!canEdit}
                                     />
+
                                     <TextField
                                         fullWidth
                                         label="Navlun"
@@ -438,6 +594,7 @@ export default function SeferDetayDrawer({
                                         sx={selectFieldSx(false)}
                                         disabled={!canEdit}
                                     />
+
                                     <TextField
                                         fullWidth
                                         label="Teslimat"
@@ -453,7 +610,12 @@ export default function SeferDetayDrawer({
                             </Section>
 
                             {/* Sistem */}
-                            <Section title="Sistem" subtitle="Otomatik alanlar." icon={<InfoOutlinedIcon fontSize="small" />} sx={{ opacity: 0.9 }}>
+                            <Section
+                                title="Sistem"
+                                subtitle="Otomatik alanlar."
+                                icon={<InfoOutlinedIcon fontSize="small" />}
+                                sx={{ opacity: 0.9 }}
+                            >
                                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1.4 }}>
                                     <TextField
                                         fullWidth
@@ -472,16 +634,16 @@ export default function SeferDetayDrawer({
                 )}
             </Box>
 
-            {/* Sticky Actions */}
+            {/* Sticky Footer */}
             <Box
                 sx={{
-                    position: "fixed",
+                    position: "sticky",
                     bottom: 0,
-                    right: 0,
-                    width: { xs: "100%", sm: 520 },
+                    zIndex: 6,
+                    flexShrink: 0,
                     p: 2,
                     backdropFilter: "blur(14px)",
-                    background: "rgba(10,12,18,0.75)",
+                    background: "rgba(10,12,18,0.92)",
                     borderTop: "1px solid rgba(255,255,255,0.08)",
                 }}
             >
@@ -522,8 +684,18 @@ export default function SeferDetayDrawer({
                 </Stack>
             </Box>
 
-            <Snackbar open={savedOpen} autoHideDuration={2500} onClose={() => setSavedOpen(false)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-                <Alert severity="success" variant="filled" onClose={() => setSavedOpen(false)} sx={{ width: "100%", borderRadius: 2 }}>
+            <Snackbar
+                open={savedOpen}
+                autoHideDuration={2500}
+                onClose={() => setSavedOpen(false)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+                <Alert
+                    severity="success"
+                    variant="filled"
+                    onClose={() => setSavedOpen(false)}
+                    sx={{ width: "100%", borderRadius: 2 }}
+                >
                     Sefer başarıyla kaydedildi
                 </Alert>
             </Snackbar>

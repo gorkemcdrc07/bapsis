@@ -348,6 +348,7 @@ export default function AracBilgileri() {
                     .insert(payload)
                     .select("*")
                     .single();
+
                 if (error) throw error;
 
                 setRows((prev) => [data, ...prev]);
@@ -355,17 +356,21 @@ export default function AracBilgileri() {
             } else {
                 if (!can(BTN.EDIT)) return;
 
-                if (!payload.id) {
+                const rowId = payload.id;
+
+                if (!rowId) {
                     setSnack({ open: true, type: "error", msg: "ID bulunamadı (edit)." });
                     return;
                 }
 
+                delete payload.id;
+                delete payload.created_at; // istersen bunu da update etme
                 payload.updated_at = new Date().toISOString();
 
                 const { data, error } = await supabase
                     .from("plakalar")
                     .update(payload)
-                    .eq("id", payload.id)
+                    .eq("id", rowId)
                     .select("*")
                     .single();
 
@@ -385,7 +390,6 @@ export default function AracBilgileri() {
             setLoading(false);
         }
     }
-
     function confirmDelete(row) {
         if (!can(BTN.DELETE)) return;
         setDeleteTarget(row);
