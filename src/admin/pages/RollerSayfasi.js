@@ -21,7 +21,6 @@ import {
     HubRounded,
     AutoFixHighRounded,
     DeleteSweepRounded,
-    ArrowForwardIosRounded,
     SearchRounded,
     ShieldRounded,
     VerifiedUserRounded,
@@ -51,11 +50,12 @@ export default function RollerSayfasi() {
 
         const { data, error } = await supabase
             .from("roller")
-            .select("*");
+            .select("*")
+            .order("olusturma_tarihi", { ascending: false });
 
         if (error) {
             console.error("Roller çekilemedi:", error);
-            setError("Roller yüklenirken hata oluştu.");
+            setError(error.message || "Roller yüklenirken hata oluştu.");
             setRoller([]);
         } else {
             setRoller(data || []);
@@ -75,15 +75,35 @@ export default function RollerSayfasi() {
         setKaydediliyor(true);
         setError("");
 
-        const { error } = await supabase.from("roller").insert([
-            {
-                ad: yeniAd,
-            },
-        ]);
+        const yeniKod = yeniAd
+            .toUpperCase()
+            .replace(/İ/g, "I")
+            .replace(/İ/g, "I")
+            .replace(/Ğ/g, "G")
+            .replace(/Ü/g, "U")
+            .replace(/Ş/g, "S")
+            .replace(/Ö/g, "O")
+            .replace(/Ç/g, "C")
+            .replace(/[^A-Z0-9\s]/g, "")
+            .replace(/\s+/g, "_");
+
+        const { data, error } = await supabase
+            .from("roller")
+            .insert([
+                {
+                    ad: yeniAd,
+                    kod: yeniKod,
+                    aktif: true,
+                },
+            ])
+            .select();
+
+        console.log("Eklenen kayıt:", data);
+        console.log("Insert hata:", error);
 
         if (error) {
             console.error("Rol eklenemedi:", error);
-            setError("Rol eklenemedi.");
+            setError(error.message || "Rol eklenemedi.");
         } else {
             setAd("");
             await fetchRoller();
@@ -97,14 +117,30 @@ export default function RollerSayfasi() {
             prev.map((item) => (item.id === id ? { ...item, ad: yeniAd } : item))
         );
 
+        const yeniKod = String(yeniAd || "")
+            .trim()
+            .toUpperCase()
+            .replace(/İ/g, "I")
+            .replace(/İ/g, "I")
+            .replace(/Ğ/g, "G")
+            .replace(/Ü/g, "U")
+            .replace(/Ş/g, "S")
+            .replace(/Ö/g, "O")
+            .replace(/Ç/g, "C")
+            .replace(/[^A-Z0-9\s]/g, "")
+            .replace(/\s+/g, "_");
+
         const { error } = await supabase
             .from("roller")
-            .update({ ad: yeniAd })
+            .update({
+                ad: yeniAd,
+                kod: yeniKod,
+            })
             .eq("id", id);
 
         if (error) {
             console.error("Rol güncellenemedi:", error);
-            setError("Rol güncellenemedi.");
+            setError(error.message || "Rol güncellenemedi.");
             await fetchRoller();
         }
     };
@@ -117,7 +153,7 @@ export default function RollerSayfasi() {
 
         if (error) {
             console.error("Rol silinemedi:", error);
-            setError("Rol silinemedi.");
+            setError(error.message || "Rol silinemedi.");
         } else {
             setRoller((prev) => prev.filter((x) => x.id !== id));
         }
@@ -305,7 +341,7 @@ export default function RollerSayfasi() {
 
                                 <Stack spacing={1.5} sx={{ p: 2 }}>
                                     {filtreliRoller.map((r, index) => {
-                                        const rolAdi = r.ad || r.rol_adi || "";
+                                        const rolAdi = r.ad || "";
                                         return (
                                             <Paper key={r.id} sx={stil.rolSatir} elevation={0}>
                                                 <Box sx={stil.rolRow}>
@@ -335,7 +371,11 @@ export default function RollerSayfasi() {
                                                     </Box>
 
                                                     <Box sx={stil.colStatus}>
-                                                        <Chip label="Veritabanında" size="small" sx={stil.durumChip} />
+                                                        <Chip
+                                                            label={r.aktif ? "Aktif" : "Pasif"}
+                                                            size="small"
+                                                            sx={stil.durumChip}
+                                                        />
                                                     </Box>
 
                                                     <Box sx={stil.colActions}>

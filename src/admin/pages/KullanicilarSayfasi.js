@@ -22,6 +22,7 @@ import {
     InputAdornment,
     Fade,
     Avatar,
+    Stack,
 } from "@mui/material";
 
 import PersonAddAltIcon from "@mui/icons-material/PersonAddAlt";
@@ -37,6 +38,7 @@ import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import ShieldRoundedIcon from "@mui/icons-material/ShieldRounded";
 import PersonOffRoundedIcon from "@mui/icons-material/PersonOffRounded";
 import VerifiedUserRoundedIcon from "@mui/icons-material/VerifiedUserRounded";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 
 import { supabase } from "../../supabase";
 
@@ -45,11 +47,11 @@ export default function KullanicilarSayfasi() {
         kullanici: "",
         mail: "",
         sifre: "",
-        rol: "", // kullanicilar tablosuna yazılacak değer
+        rol: "",
     });
 
     const [rows, setRows] = useState([]);
-    const [roles, setRoles] = useState([]); // [{ id, kod, ad, aktif, olusturma_tarihi }]
+    const [roles, setRoles] = useState([]);
     const [arama, setArama] = useState("");
     const [loading, setLoading] = useState(true);
     const [rolesLoading, setRolesLoading] = useState(true);
@@ -62,9 +64,7 @@ export default function KullanicilarSayfasi() {
         showMsg._t = window.setTimeout(() => setMessage({ type: "", text: "" }), 4000);
     };
 
-    const normalizeRoleCode = (value) =>
-        String(value || "").trim().toUpperCase();
-
+    const normalizeRoleCode = (value) => String(value || "").trim().toUpperCase();
     const isAdminRole = (value) => normalizeRoleCode(value) === "ADMIN";
 
     const fetchRoles = async () => {
@@ -81,8 +81,8 @@ export default function KullanicilarSayfasi() {
             setRoles([]);
         } else {
             const list = (data ?? [])
-                .filter((r) => r && r.kod && r.ad)
-                .filter((r) => !isAdminRole(r.kod)); // ADMIN rolü asla seçilemez
+                .filter((r) => r && r.id && r.kod && r.ad)
+                .filter((r) => !isAdminRole(r.kod));
 
             setRoles(list);
 
@@ -105,7 +105,7 @@ export default function KullanicilarSayfasi() {
 
         const { data, error } = await supabase
             .from("kullanicilar")
-            .select("id, kullanici, mail, sifre, rol, olusturma_tarihi")
+            .select("id, kullanici, mail, sifre, rol, rol_id, olusturma_tarihi")
             .order("olusturma_tarihi", { ascending: false });
 
         if (error) {
@@ -141,11 +141,14 @@ export default function KullanicilarSayfasi() {
     };
 
     const submit = async () => {
+        const selectedRole = roles.find((r) => r.kod === form.rol);
+
         const payload = {
             kullanici: form.kullanici.trim(),
             mail: form.mail.trim(),
             sifre: form.sifre,
-            rol: String(form.rol || "").trim(), // DB’ye kod yazıyoruz
+            rol: String(form.rol || "").trim(),
+            rol_id: selectedRole?.id || null,
         };
 
         if (!payload.kullanici || !payload.mail || !payload.sifre || !payload.rol) {
@@ -161,6 +164,11 @@ export default function KullanicilarSayfasi() {
         const roleKodlari = roles.map((r) => r.kod);
         if (roleKodlari.length > 0 && !roleKodlari.includes(payload.rol)) {
             showMsg("error", "Seçilen rol listede yok. Lütfen tekrar deneyin.");
+            return;
+        }
+
+        if (!payload.rol_id) {
+            showMsg("error", "Seçilen role ait rol_id bulunamadı.");
             return;
         }
 
@@ -208,71 +216,111 @@ export default function KullanicilarSayfasi() {
         if (r === "YONETICI" || r === "YÖNETİCİ") {
             return {
                 fontWeight: 800,
-                fontSize: "0.72rem",
-                bgcolor: "rgba(16, 185, 129, 0.12)",
-                color: "#10b981",
-                border: "1px solid rgba(16,185,129,0.25)",
-                borderRadius: "999px",
+                bgcolor: "rgba(16, 185, 129, 0.16)",
+                color: "#86efac",
+                border: "1px solid rgba(16,185,129,0.24)",
             };
         }
 
         if (r === "TAKIP") {
             return {
                 fontWeight: 800,
-                fontSize: "0.72rem",
-                bgcolor: "rgba(168, 85, 247, 0.12)",
-                color: "#a855f7",
-                border: "1px solid rgba(168,85,247,0.25)",
-                borderRadius: "999px",
+                bgcolor: "rgba(168, 85, 247, 0.16)",
+                color: "#d8b4fe",
+                border: "1px solid rgba(168,85,247,0.24)",
             };
         }
 
         if (r === "ADMIN") {
             return {
                 fontWeight: 800,
-                fontSize: "0.72rem",
-                bgcolor: "rgba(239, 68, 68, 0.12)",
-                color: "#ef4444",
-                border: "1px solid rgba(239,68,68,0.25)",
-                borderRadius: "999px",
+                bgcolor: "rgba(239, 68, 68, 0.16)",
+                color: "#fca5a5",
+                border: "1px solid rgba(239,68,68,0.24)",
             };
         }
 
         return {
             fontWeight: 800,
-            fontSize: "0.72rem",
-            bgcolor: "rgba(59, 130, 246, 0.12)",
-            color: "#3b82f6",
-            border: "1px solid rgba(59,130,246,0.25)",
-            borderRadius: "999px",
+            bgcolor: "rgba(59, 130, 246, 0.16)",
+            color: "#93c5fd",
+            border: "1px solid rgba(59,130,246,0.24)",
         };
     };
 
     return (
         <Box sx={styles.page}>
-            <Box sx={styles.hero}>
-                <Box>
-                    <Typography sx={styles.eyebrow}>USER MANAGEMENT</Typography>
-                    <Typography sx={styles.title}>
-                        Kullanıcı &{" "}
-                        <Typography component="span" sx={styles.titleAccent}>
-                            Rol Yönetimi
+            <Box sx={styles.glowOne} />
+            <Box sx={styles.glowTwo} />
+
+            <Paper sx={styles.heroCard}>
+                <Box sx={styles.heroContent}>
+                    <Stack spacing={1.1} sx={{ maxWidth: 760 }}>
+                        <Typography sx={styles.eyebrow}>USER MANAGEMENT PANEL</Typography>
+                        <Typography sx={styles.title}>
+                            Kullanıcı ve Rol Yönetimini
+                            <Box component="span" sx={styles.titleAccent}>
+                                {" "}
+                                daha temiz, modern ve okunabilir{" "}
+                            </Box>
+                            hale getirin
                         </Typography>
-                    </Typography>
-                    <Typography sx={styles.subtitle}>
-                        Sistem kullanıcılarını yönetin, rollerini belirleyin ve sadece yetkili rolleri atayın.
-                    </Typography>
+                        <Typography sx={styles.subtitle}>
+                            Kullanıcı ekleme, rol atama ve mevcut kayıtları yönetme işlemleri tek ekranda,
+                            daha sade kart yapısı ve güçlü görsel hiyerarşi ile sunulur.
+                        </Typography>
+                    </Stack>
+
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
+                        <Button
+                            startIcon={<RefreshIcon />}
+                            onClick={refreshAll}
+                            sx={styles.btnSecondary}
+                            disabled={loading || rolesLoading}
+                        >
+                            Verileri Yenile
+                        </Button>
+                    </Stack>
                 </Box>
 
-                <Button
-                    startIcon={<RefreshIcon />}
-                    onClick={refreshAll}
-                    sx={styles.btnGhost}
-                    disabled={loading || rolesLoading}
-                >
-                    Yenile
-                </Button>
-            </Box>
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                    <Grid item xs={12} md={4}>
+                        <Paper sx={styles.metricCard}>
+                            <Box sx={styles.metricIconBlue}>
+                                <Groups2Icon />
+                            </Box>
+                            <Box>
+                                <Typography sx={styles.metricValue}>{rows.length}</Typography>
+                                <Typography sx={styles.metricLabel}>Toplam Kullanıcı</Typography>
+                            </Box>
+                        </Paper>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Paper sx={styles.metricCard}>
+                            <Box sx={styles.metricIconGreen}>
+                                <VerifiedUserRoundedIcon />
+                            </Box>
+                            <Box>
+                                <Typography sx={styles.metricValue}>{roles.length}</Typography>
+                                <Typography sx={styles.metricLabel}>Aktif Rol</Typography>
+                            </Box>
+                        </Paper>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Paper sx={styles.metricCard}>
+                            <Box sx={styles.metricIconAmber}>
+                                <ShieldRoundedIcon />
+                            </Box>
+                            <Box>
+                                <Typography sx={styles.metricValue}>ADMIN Kısıtlı</Typography>
+                                <Typography sx={styles.metricLabel}>Güvenlik politikası açık</Typography>
+                            </Box>
+                        </Paper>
+                    </Grid>
+                </Grid>
+            </Paper>
 
             {message.text && (
                 <Fade in={!!message.text}>
@@ -282,62 +330,24 @@ export default function KullanicilarSayfasi() {
                 </Fade>
             )}
 
-            <Grid container spacing={2.5} sx={{ mb: 3 }}>
-                <Grid item xs={12} md={4}>
-                    <Paper sx={styles.statCard}>
-                        <Box sx={styles.statIconWrap}>
-                            <Groups2Icon sx={{ color: "#60a5fa" }} />
-                        </Box>
-                        <Box>
-                            <Typography sx={styles.statValue}>{rows.length}</Typography>
-                            <Typography sx={styles.statLabel}>Toplam Kullanıcı</Typography>
-                        </Box>
-                    </Paper>
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                    <Paper sx={styles.statCard}>
-                        <Box sx={styles.statIconWrap}>
-                            <VerifiedUserRoundedIcon sx={{ color: "#34d399" }} />
-                        </Box>
-                        <Box>
-                            <Typography sx={styles.statValue}>{roles.length}</Typography>
-                            <Typography sx={styles.statLabel}>Seçilebilir Rol</Typography>
-                        </Box>
-                    </Paper>
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                    <Paper sx={styles.statCard}>
-                        <Box sx={styles.statIconWrap}>
-                            <ShieldRoundedIcon sx={{ color: "#fbbf24" }} />
-                        </Box>
-                        <Box>
-                            <Typography sx={styles.statValue}>ADMIN Kapalı</Typography>
-                            <Typography sx={styles.statLabel}>Güvenlik Kuralı Aktif</Typography>
-                        </Box>
-                    </Paper>
-                </Grid>
-            </Grid>
-
-            <Grid container spacing={3}>
-                <Grid item xs={12} lg={4}>
+            <Grid container spacing={3} alignItems="stretch">
+                <Grid item xs={12} lg={5} xl={4.5}>
                     <Paper sx={styles.formCard}>
-                        <Box sx={styles.cardHeader}>
-                            <Box sx={styles.cardHeaderIcon}>
-                                <PersonAddAltIcon sx={{ color: "#60a5fa" }} />
+                        <Box sx={styles.sectionHeaderCompact}>
+                            <Box sx={styles.sectionHeaderIconBlue}>
+                                <PersonAddAltIcon />
                             </Box>
                             <Box>
-                                <Typography sx={styles.cardTitle}>Yeni Kullanıcı</Typography>
-                                <Typography sx={styles.cardSubTitle}>
-                                    Kullanıcı oluştur ve güvenli rol ata
+                                <Typography sx={styles.sectionTitle}>Yeni Kullanıcı Oluştur</Typography>
+                                <Typography sx={styles.sectionSubTitle}>
+                                    Kullanıcı tanımlayın ve güvenli rol atayın
                                 </Typography>
                             </Box>
                         </Box>
 
                         <Divider sx={styles.divider} />
 
-                        <Box sx={{ p: 3, display: "flex", flexDirection: "column", gap: 2.2 }}>
+                        <Box sx={styles.formContentDense}>
                             <TextField
                                 fullWidth
                                 label="Kullanıcı Adı"
@@ -346,7 +356,7 @@ export default function KullanicilarSayfasi() {
                                 InputProps={{
                                     startAdornment: (
                                         <InputAdornment position="start">
-                                            <PersonIcon sx={{ color: "#64748b" }} />
+                                            <PersonIcon sx={{ color: "#94a3b8" }} />
                                         </InputAdornment>
                                     ),
                                 }}
@@ -361,7 +371,7 @@ export default function KullanicilarSayfasi() {
                                 InputProps={{
                                     startAdornment: (
                                         <InputAdornment position="start">
-                                            <MailIcon sx={{ color: "#64748b" }} />
+                                            <MailIcon sx={{ color: "#94a3b8" }} />
                                         </InputAdornment>
                                     ),
                                 }}
@@ -377,7 +387,7 @@ export default function KullanicilarSayfasi() {
                                 InputProps={{
                                     startAdornment: (
                                         <InputAdornment position="start">
-                                            <LockIcon sx={{ color: "#64748b" }} />
+                                            <LockIcon sx={{ color: "#94a3b8" }} />
                                         </InputAdornment>
                                     ),
                                 }}
@@ -398,13 +408,14 @@ export default function KullanicilarSayfasi() {
                                 MenuProps={{
                                     PaperProps: {
                                         sx: {
-                                            bgcolor: "#0b1220",
+                                            bgcolor: "#081120",
                                             border: "1px solid rgba(255,255,255,0.08)",
-                                            borderRadius: "16px",
+                                            borderRadius: "18px",
                                             backdropFilter: "blur(20px)",
-                                            "& .MuiMenuItem-root": { color: "#fff" },
+                                            mt: 1,
+                                            "& .MuiMenuItem-root": { color: "#fff", py: 1.2 },
                                             "& .MuiMenuItem-root.Mui-selected": {
-                                                bgcolor: "rgba(59,130,246,0.18)",
+                                                bgcolor: "rgba(59,130,246,0.16)",
                                             },
                                             "& .MuiMenuItem-root:hover": {
                                                 bgcolor: "rgba(255,255,255,0.06)",
@@ -430,11 +441,16 @@ export default function KullanicilarSayfasi() {
                                 )}
                             </Select>
 
-                            <Paper sx={styles.infoNote} elevation={0}>
-                                <ShieldRoundedIcon sx={{ fontSize: 18, color: "#fbbf24" }} />
-                                <Typography sx={styles.infoNoteText}>
-                                    Güvenlik gereği <b>ADMIN</b> kodlu rol bu ekrandan seçilemez ve atanamaz.
-                                </Typography>
+                            <Paper elevation={0} sx={styles.securityNoteCompact}>
+                                <Box sx={styles.securityIconWrap}>
+                                    <ShieldRoundedIcon sx={{ fontSize: 18 }} />
+                                </Box>
+                                <Box>
+                                    <Typography sx={styles.securityTitle}>Güvenlik Notu</Typography>
+                                    <Typography sx={styles.securityText}>
+                                        <b>ADMIN</b> rolü bu ekrandan atanamaz.
+                                    </Typography>
+                                </Box>
                             </Paper>
 
                             <Button
@@ -451,17 +467,17 @@ export default function KullanicilarSayfasi() {
                     </Paper>
                 </Grid>
 
-                <Grid item xs={12} lg={8}>
-                    <Paper sx={styles.tableCard}>
-                        <Box sx={styles.cardHeader}>
-                            <Box sx={styles.cardHeaderIcon}>
-                                <BadgeIcon sx={{ color: "#34d399" }} />
+                <Grid item xs={12} lg={7} xl={7.5}>
+                    <Paper sx={styles.tableCardLarge}>
+                        <Box sx={styles.sectionHeaderTableWide}>
+                            <Box sx={styles.sectionHeaderIconGreen}>
+                                <BadgeIcon />
                             </Box>
 
-                            <Box sx={{ flex: 1 }}>
-                                <Typography sx={styles.cardTitle}>Kullanıcı Listesi</Typography>
-                                <Typography sx={styles.cardSubTitle}>
-                                    Tanımlı kullanıcıları görüntüleyin ve yönetin
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <Typography sx={styles.sectionTitle}>Kullanıcı Listesi</Typography>
+                                <Typography sx={styles.sectionSubTitle}>
+                                    Masaüstü kullanımına uygun geniş görünüm
                                 </Typography>
                             </Box>
 
@@ -470,7 +486,7 @@ export default function KullanicilarSayfasi() {
                                 placeholder="Kullanıcı, mail veya rol ara..."
                                 value={arama}
                                 onChange={(e) => setArama(e.target.value)}
-                                sx={styles.searchInput}
+                                sx={styles.searchInputWide}
                                 InputProps={{
                                     startAdornment: (
                                         <InputAdornment position="start">
@@ -483,13 +499,14 @@ export default function KullanicilarSayfasi() {
 
                         <Divider sx={styles.divider} />
 
-                        <Box sx={{ overflowX: "auto" }}>
+                        <Box sx={styles.tableWrapDesktop}>
                             <Table>
                                 <TableHead>
-                                    <TableRow sx={{ bgcolor: "rgba(255,255,255,0.02)" }}>
+                                    <TableRow sx={styles.tableHeadRow}>
                                         <TableCell sx={styles.th}>Kullanıcı</TableCell>
                                         <TableCell sx={styles.th}>Rol</TableCell>
-                                        <TableCell sx={styles.th}>Tarih</TableCell>
+                                        <TableCell sx={styles.th}>Rol ID</TableCell>
+                                        <TableCell sx={styles.th}>Oluşturulma Tarihi</TableCell>
                                         <TableCell sx={styles.th} align="right">
                                             İşlem
                                         </TableCell>
@@ -499,37 +516,35 @@ export default function KullanicilarSayfasi() {
                                 <TableBody>
                                     {loading ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} align="center" sx={{ py: 8 }}>
+                                            <TableCell colSpan={5} align="center" sx={{ py: 10, borderBottom: 0 }}>
                                                 <CircularProgress size={30} sx={{ color: "#60a5fa" }} />
                                             </TableCell>
                                         </TableRow>
                                     ) : filteredRows.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} align="center" sx={{ py: 8 }}>
-                                                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
-                                                    <PersonOffRoundedIcon sx={{ color: "#334155", fontSize: 34 }} />
-                                                    <Typography sx={{ color: "#94a3b8" }}>
-                                                        Gösterilecek kullanıcı bulunamadı.
+                                            <TableCell colSpan={5} align="center" sx={{ py: 10, borderBottom: 0 }}>
+                                                <Stack alignItems="center" spacing={1.2}>
+                                                    <Box sx={styles.emptyIconWrap}>
+                                                        <PersonOffRoundedIcon sx={{ color: "#64748b", fontSize: 34 }} />
+                                                    </Box>
+                                                    <Typography sx={{ color: "#cbd5e1", fontWeight: 700 }}>
+                                                        Gösterilecek kullanıcı bulunamadı
                                                     </Typography>
-                                                </Box>
+                                                </Stack>
                                             </TableCell>
                                         </TableRow>
                                     ) : (
                                         filteredRows.map((u) => (
                                             <TableRow key={u.id} hover sx={styles.tableRow}>
                                                 <TableCell sx={styles.td}>
-                                                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                                                    <Box sx={styles.userCell}>
                                                         <Avatar sx={styles.avatar}>
                                                             {String(u.kullanici || "?").charAt(0).toUpperCase()}
                                                         </Avatar>
 
-                                                        <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                                                            <Typography sx={styles.userName}>
-                                                                {u.kullanici}
-                                                            </Typography>
-                                                            <Typography sx={styles.userMail}>
-                                                                {u.mail}
-                                                            </Typography>
+                                                        <Box sx={{ minWidth: 0 }}>
+                                                            <Typography sx={styles.userName}>{u.kullanici}</Typography>
+                                                            <Typography sx={styles.userMail}>{u.mail}</Typography>
                                                         </Box>
                                                     </Box>
                                                 </TableCell>
@@ -538,8 +553,12 @@ export default function KullanicilarSayfasi() {
                                                     <Chip
                                                         label={String(getRoleLabel(u.rol) || "—").toUpperCase()}
                                                         size="small"
-                                                        sx={roleChipSx(u.rol)}
+                                                        sx={{ ...styles.roleChip, ...roleChipSx(u.rol) }}
                                                     />
+                                                </TableCell>
+
+                                                <TableCell sx={styles.td}>
+                                                    <Typography sx={styles.metaText}>{u.rol_id || "—"}</Typography>
                                                 </TableCell>
 
                                                 <TableCell sx={styles.td}>
@@ -552,10 +571,7 @@ export default function KullanicilarSayfasi() {
 
                                                 <TableCell sx={styles.td} align="right">
                                                     <Tooltip title="Sil">
-                                                        <IconButton
-                                                            onClick={() => deleteUser(u.id)}
-                                                            sx={styles.deleteBtn}
-                                                        >
+                                                        <IconButton onClick={() => deleteUser(u.id)} sx={styles.deleteBtn}>
                                                             <DeleteIcon fontSize="small" />
                                                         </IconButton>
                                                     </Tooltip>
@@ -569,8 +585,12 @@ export default function KullanicilarSayfasi() {
 
                         <Divider sx={styles.divider} />
 
-                        <Box sx={styles.footerNote}>
-                            Not: Roller <b>roller</b> tablosundan <b>id, kod, ad, aktif, olusturma_tarihi</b> alanlarıyla okunur. <b>ADMIN</b> kodlu rol listeden çıkarılır.
+                        <Box sx={styles.footerInfo}>
+                            <ChevronRightRoundedIcon sx={{ fontSize: 18, color: "#3b82f6", mt: "2px" }} />
+                            <Typography sx={styles.footerText}>
+                                Roller <b>roller</b> tablosundan okunur. Kullanıcı eklenirken <b>rol</b> ve{" "}
+                                <b>rol_id</b> birlikte yazılır. <b>ADMIN</b> rolü güvenlik nedeniyle listeden çıkarılır.
+                            </Typography>
                         </Box>
                     </Paper>
                 </Grid>
@@ -579,239 +599,410 @@ export default function KullanicilarSayfasi() {
     );
 }
 
+const glassPanel = {
+    background: "linear-gradient(180deg, rgba(10,18,33,0.92), rgba(15,23,42,0.84))",
+    border: "1px solid rgba(148,163,184,0.12)",
+    boxShadow: "0 24px 80px rgba(2, 8, 23, 0.42)",
+    backdropFilter: "blur(18px)",
+};
+
 const styles = {
     page: {
-        p: { xs: 1.5, md: 3.5 },
-        maxWidth: 1450,
-        margin: "0 auto",
+        position: "relative",
+        px: { xs: 1.5, md: 3 },
+        py: { xs: 2, md: 3.5 },
+        maxWidth: 1480,
+        mx: "auto",
         minHeight: "100%",
+        overflow: "hidden",
         background:
-            "radial-gradient(circle at top left, rgba(59,130,246,0.08), transparent 22%), radial-gradient(circle at top right, rgba(16,185,129,0.05), transparent 20%)",
+            "radial-gradient(circle at 0% 0%, rgba(37,99,235,0.12), transparent 24%), radial-gradient(circle at 100% 10%, rgba(52,211,153,0.10), transparent 22%), linear-gradient(180deg, #020617 0%, #081120 100%)",
     },
-    hero: {
-        mb: 4,
+    glowOne: {
+        position: "absolute",
+        top: -120,
+        left: -80,
+        width: 260,
+        height: 260,
+        borderRadius: "50%",
+        background: "rgba(37,99,235,0.18)",
+        filter: "blur(90px)",
+        pointerEvents: "none",
+    },
+    glowTwo: {
+        position: "absolute",
+        right: -100,
+        top: 80,
+        width: 260,
+        height: 260,
+        borderRadius: "50%",
+        background: "rgba(16,185,129,0.14)",
+        filter: "blur(100px)",
+        pointerEvents: "none",
+    },
+    heroCard: {
+        ...glassPanel,
+        position: "relative",
+        zIndex: 1,
+        borderRadius: "26px",
+        p: { xs: 2, md: 3 },
+        mb: 2.5,
+        overflow: "hidden",
+        minHeight: 250,
+    },
+    heroContent: {
         display: "flex",
         justifyContent: "space-between",
-        alignItems: "flex-start",
         gap: 2,
         flexWrap: "wrap",
+        alignItems: "flex-start",
+        mb: 2.5,
     },
     eyebrow: {
         color: "#60a5fa",
-        fontSize: "0.75rem",
+        fontSize: "0.76rem",
         fontWeight: 900,
-        letterSpacing: "0.35em",
-        mb: 0.8,
+        letterSpacing: "0.34em",
+        textTransform: "uppercase",
     },
     title: {
         color: "#f8fafc",
-        fontSize: { xs: "2rem", md: "2.8rem" },
+        fontSize: { xs: "1.8rem", md: "2.8rem", xl: "3.1rem" },
         fontWeight: 900,
-        lineHeight: 1.05,
-        letterSpacing: "-0.04em",
+        lineHeight: 1.02,
+        letterSpacing: "-0.05em",
+        maxWidth: 900,
     },
     titleAccent: {
         color: "#34d399",
-        fontSize: "inherit",
-        fontWeight: "inherit",
-        textShadow: "0 0 22px rgba(52, 211, 153, 0.2)",
+        textShadow: "0 0 24px rgba(52,211,153,0.16)",
     },
     subtitle: {
         color: "#94a3b8",
-        mt: 1.2,
-        fontSize: "0.95rem",
+        mt: 0.5,
+        fontSize: { xs: "0.95rem", md: "1rem" },
+        lineHeight: 1.7,
     },
-    alert: {
-        mb: 3,
-        borderRadius: "14px",
-        border: "1px solid rgba(255,255,255,0.08)",
-    },
-    statCard: {
-        p: 2.2,
-        borderRadius: "24px",
+    metricCard: {
+        ...glassPanel,
+        borderRadius: "20px",
+        p: 1.8,
         display: "flex",
         alignItems: "center",
-        gap: 2,
-        color: "#fff",
-        background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(15,23,42,0.82))",
-        border: "1px solid rgba(255,255,255,0.07)",
-        boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
+        gap: 1.4,
+        height: "100%",
+        minHeight: 92,
     },
-    statIconWrap: {
-        width: 54,
-        height: 54,
-        borderRadius: "18px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        bgcolor: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.06)",
+    metricIconBlue: {
+        width: 52,
+        height: 52,
+        borderRadius: "16px",
+        display: "grid",
+        placeItems: "center",
+        color: "#93c5fd",
+        background: "rgba(59,130,246,0.14)",
+        border: "1px solid rgba(59,130,246,0.20)",
     },
-    statValue: {
+    metricIconGreen: {
+        width: 52,
+        height: 52,
+        borderRadius: "16px",
+        display: "grid",
+        placeItems: "center",
+        color: "#6ee7b7",
+        background: "rgba(16,185,129,0.14)",
+        border: "1px solid rgba(16,185,129,0.20)",
+    },
+    metricIconAmber: {
+        width: 52,
+        height: 52,
+        borderRadius: "16px",
+        display: "grid",
+        placeItems: "center",
+        color: "#fcd34d",
+        background: "rgba(245,158,11,0.14)",
+        border: "1px solid rgba(245,158,11,0.20)",
+    },
+    metricValue: {
         color: "#fff",
         fontWeight: 900,
-        fontSize: "1.35rem",
+        fontSize: "1.3rem",
         lineHeight: 1.05,
     },
-    statLabel: {
+    metricLabel: {
         color: "#94a3b8",
-        fontSize: "0.82rem",
-        mt: 0.4,
+        fontSize: "0.84rem",
+        mt: 0.35,
+    },
+    alert: {
+        position: "relative",
+        zIndex: 1,
+        mb: 3,
+        borderRadius: "18px",
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(15,23,42,0.92)",
+        color: "#fff",
     },
     formCard: {
-        borderRadius: "26px",
-        bgcolor: "#0f172a",
-        backgroundImage:
-            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-        border: "1px solid rgba(255,255,255,0.08)",
-        color: "#fff",
-        boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+        ...glassPanel,
+        position: "relative",
+        zIndex: 1,
+        borderRadius: "24px",
         overflow: "hidden",
         height: "100%",
-        backdropFilter: "blur(14px)",
+        minHeight: 100,
     },
     tableCard: {
-        borderRadius: "26px",
-        bgcolor: "#0f172a",
-        backgroundImage:
-            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-        border: "1px solid rgba(255,255,255,0.08)",
-        color: "#fff",
-        boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+        ...glassPanel,
+        position: "relative",
+        zIndex: 1,
+        borderRadius: "24px",
         overflow: "hidden",
-        backdropFilter: "blur(14px)",
     },
-    cardHeader: {
+    tableCardLarge: {
+        ...glassPanel,
+        position: "relative",
+        zIndex: 1,
+        borderRadius: "24px",
+        overflow: "hidden",
+        minHeight: 640,
+    },
+    sectionHeader: {
+        p: 2.25,
+        display: "flex",
+        alignItems: "center",
+        gap: 1.25,
+    },
+    sectionHeaderCompact: {
+        p: 2,
+        display: "flex",
+        alignItems: "center",
+        gap: 1.2,
+    },
+    sectionHeaderTable: {
         p: 2.5,
         display: "flex",
         alignItems: "center",
         gap: 1.5,
+        flexWrap: "wrap",
     },
-    cardHeaderIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: "16px",
+    sectionHeaderTableWide: {
+        p: 2.1,
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
-        bgcolor: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.06)",
+        gap: 1.2,
+    },
+    sectionHeaderIconBlue: {
+        width: 50,
+        height: 50,
+        borderRadius: "16px",
+        display: "grid",
+        placeItems: "center",
+        color: "#93c5fd",
+        background: "rgba(59,130,246,0.12)",
+        border: "1px solid rgba(59,130,246,0.20)",
         flexShrink: 0,
     },
-    cardTitle: {
+    sectionHeaderIconGreen: {
+        width: 50,
+        height: 50,
+        borderRadius: "16px",
+        display: "grid",
+        placeItems: "center",
+        color: "#6ee7b7",
+        background: "rgba(16,185,129,0.12)",
+        border: "1px solid rgba(16,185,129,0.20)",
+        flexShrink: 0,
+    },
+    sectionTitle: {
         color: "#fff",
         fontWeight: 900,
         fontSize: "1.05rem",
         lineHeight: 1.1,
     },
-    cardSubTitle: {
+    sectionSubTitle: {
         color: "#64748b",
-        fontSize: "0.82rem",
+        fontSize: "0.84rem",
         mt: 0.35,
     },
     divider: {
         borderColor: "rgba(255,255,255,0.06)",
     },
+    formContent: {
+        p: 2.5,
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+    },
+    formContentDense: {
+        p: 2,
+        display: "flex",
+        flexDirection: "column",
+        gap: 1.2,
+    },
     input: {
         "& .MuiInputLabel-root": { color: "#94a3b8" },
-        "& .MuiInputLabel-root.Mui-focused": { color: "#94a3b8" },
+        "& .MuiInputLabel-root.Mui-focused": { color: "#cbd5e1" },
         "& .MuiOutlinedInput-root": {
-            borderRadius: "14px",
+            borderRadius: "16px",
             bgcolor: "rgba(255,255,255,0.03)",
             color: "#fff",
+            transition: "all .2s ease",
             "& fieldset": { borderColor: "rgba(255,255,255,0.08)" },
-            "&:hover fieldset": { borderColor: "rgba(255,255,255,0.16)" },
+            "&:hover fieldset": { borderColor: "rgba(96,165,250,0.35)" },
+            "&.Mui-focused": {
+                bgcolor: "rgba(15,23,42,0.88)",
+                boxShadow: "0 0 0 4px rgba(59,130,246,0.10)",
+            },
             "&.Mui-focused fieldset": {
                 borderColor: "#3b82f6",
-                boxShadow: "0 0 0 4px rgba(59,130,246,0.08)",
             },
         },
         "& .MuiInputBase-input": { color: "#fff" },
     },
     select: {
-        borderRadius: "14px",
+        borderRadius: "16px",
         bgcolor: "rgba(255,255,255,0.03)",
         color: "#fff",
-        "& .MuiSelect-select": { color: "#fff" },
+        minHeight: 56,
+        "& .MuiSelect-select": { color: "#fff", display: "flex", alignItems: "center" },
         "& .MuiSvgIcon-root": { color: "#94a3b8" },
         "& .MuiOutlinedInput-notchedOutline": {
             borderColor: "rgba(255,255,255,0.08)",
         },
         "&:hover .MuiOutlinedInput-notchedOutline": {
-            borderColor: "rgba(255,255,255,0.16)",
+            borderColor: "rgba(96,165,250,0.35)",
         },
         "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
             borderColor: "#3b82f6",
-            boxShadow: "0 0 0 4px rgba(59,130,246,0.08)",
         },
     },
-    infoNote: {
+    securityNote: {
         display: "flex",
-        alignItems: "flex-start",
-        gap: 1.2,
+        gap: 1.4,
         p: 1.6,
-        borderRadius: "16px",
-        bgcolor: "rgba(251,191,36,0.06)",
-        border: "1px solid rgba(251,191,36,0.12)",
+        borderRadius: "18px",
+        background: "linear-gradient(180deg, rgba(245,158,11,0.08), rgba(245,158,11,0.04))",
+        border: "1px solid rgba(245,158,11,0.14)",
     },
-    infoNoteText: {
+    securityNoteCompact: {
+        display: "flex",
+        gap: 1.1,
+        p: 1.2,
+        borderRadius: "14px",
+        background: "linear-gradient(180deg, rgba(245,158,11,0.08), rgba(245,158,11,0.04))",
+        border: "1px solid rgba(245,158,11,0.14)",
+    },
+    securityIconWrap: {
+        width: 34,
+        height: 34,
+        borderRadius: "12px",
+        display: "grid",
+        placeItems: "center",
+        color: "#fbbf24",
+        background: "rgba(245,158,11,0.12)",
+        flexShrink: 0,
+    },
+    securityTitle: {
+        color: "#fef3c7",
+        fontWeight: 800,
+        fontSize: "0.84rem",
+        mb: 0.35,
+    },
+    securityText: {
         color: "#cbd5e1",
         fontSize: "0.82rem",
-        lineHeight: 1.6,
+        lineHeight: 1.65,
     },
     btnPrimary: {
-        py: 1.5,
-        borderRadius: "14px",
+        py: 1.6,
+        borderRadius: "16px",
         fontWeight: 800,
         textTransform: "none",
         fontSize: "0.98rem",
-        background: "linear-gradient(45deg, #2563eb, #3b82f6)",
-        boxShadow: "0 12px 24px rgba(59, 130, 246, 0.28)",
+        background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 55%, #60a5fa 100%)",
+        boxShadow: "0 16px 30px rgba(37,99,235,0.32)",
         "&:hover": {
-            background: "linear-gradient(45deg, #2563eb, #3b82f6)",
+            background: "linear-gradient(135deg, #2563eb 0%, #3b82f6 55%, #60a5fa 100%)",
             transform: "translateY(-1px)",
+            boxShadow: "0 20px 34px rgba(37,99,235,0.36)",
+        },
+        "&.Mui-disabled": {
+            color: "rgba(255,255,255,0.5)",
+            background: "rgba(255,255,255,0.08)",
         },
     },
-    btnGhost: {
-        color: "#94a3b8",
+    btnSecondary: {
+        color: "#e2e8f0",
         textTransform: "none",
         fontWeight: 700,
-        borderRadius: "12px",
+        borderRadius: "14px",
         px: 2,
-        py: 1,
+        py: 1.1,
         border: "1px solid rgba(255,255,255,0.08)",
-        bgcolor: "rgba(255,255,255,0.02)",
+        bgcolor: "rgba(255,255,255,0.04)",
+        backdropFilter: "blur(12px)",
         "&:hover": {
-            bgcolor: "rgba(255,255,255,0.05)",
-            color: "#fff",
+            bgcolor: "rgba(255,255,255,0.08)",
+            borderColor: "rgba(96,165,250,0.30)",
         },
     },
     searchInput: {
-        minWidth: 250,
+        width: { xs: "100%", sm: 260 },
         "& .MuiOutlinedInput-root": {
             borderRadius: "14px",
             bgcolor: "rgba(255,255,255,0.03)",
             color: "#fff",
-            "& fieldset": { borderColor: "rgba(255,255,255,0.08)" },
-            "&:hover fieldset": { borderColor: "rgba(255,255,255,0.16)" },
-            "&.Mui-focused fieldset": { borderColor: "#3b82f6" },
+            "& fieldset": {
+                borderColor: "rgba(255,255,255,0.08)",
+            },
+            "&:hover fieldset": {
+                borderColor: "rgba(96,165,250,0.35)",
+            },
+            "&.Mui-focused fieldset": {
+                borderColor: "#3b82f6",
+            },
         },
-        "& input": {
+        "& .MuiInputBase-input": {
             color: "#fff",
         },
-        "& input::placeholder": {
-            color: "#64748b",
-            opacity: 1,
+    },
+    searchInputWide: {
+        width: { xs: "100%", md: 320 },
+        minWidth: { md: 260 },
+        "& .MuiOutlinedInput-root": {
+            borderRadius: "14px",
+            bgcolor: "rgba(255,255,255,0.03)",
+            color: "#fff",
+            "& fieldset": {
+                borderColor: "rgba(255,255,255,0.08)",
+            },
+            "&:hover fieldset": {
+                borderColor: "rgba(96,165,250,0.35)",
+            },
+            "&.Mui-focused fieldset": {
+                borderColor: "#3b82f6",
+            },
         },
+        "& .MuiInputBase-input": {
+            color: "#fff",
+        },
+    },
+    tableWrapDesktop: {
+        width: "100%",
+        overflowX: "auto",
+    },
+    tableHeadRow: {
+        bgcolor: "rgba(255,255,255,0.02)",
     },
     th: {
         color: "#64748b",
-        fontWeight: 800,
-        fontSize: "0.74rem",
+        fontWeight: 900,
+        fontSize: "0.72rem",
         textTransform: "uppercase",
-        letterSpacing: "0.08em",
+        letterSpacing: "0.12em",
         borderColor: "rgba(255,255,255,0.06)",
-        py: 2,
+        py: 1.8,
     },
     td: {
         borderColor: "rgba(255,255,255,0.06)",
@@ -819,21 +1010,28 @@ const styles = {
         color: "#e2e8f0",
     },
     tableRow: {
+        transition: "all .18s ease",
         "&:hover": {
-            bgcolor: "rgba(255,255,255,0.025) !important",
+            bgcolor: "rgba(255,255,255,0.03) !important",
         },
     },
+    userCell: {
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        minWidth: 0,
+    },
     avatar: {
-        width: 42,
-        height: 42,
+        width: 44,
+        height: 44,
         fontSize: "0.95rem",
-        fontWeight: 800,
+        fontWeight: 900,
         color: "#fff",
         background: "linear-gradient(135deg, #2563eb, #34d399)",
-        boxShadow: "0 8px 18px rgba(37,99,235,0.25)",
+        boxShadow: "0 10px 22px rgba(37,99,235,0.24)",
     },
     userName: {
-        fontWeight: 700,
+        fontWeight: 800,
         fontSize: "0.95rem",
         color: "#f8fafc",
         whiteSpace: "nowrap",
@@ -841,25 +1039,55 @@ const styles = {
         textOverflow: "ellipsis",
     },
     userMail: {
-        fontSize: "0.8rem",
+        fontSize: "0.81rem",
         color: "#64748b",
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
+        mt: 0.25,
+    },
+    roleChip: {
+        borderRadius: "999px",
+        px: 0.4,
+        fontSize: "0.72rem",
+        letterSpacing: "0.02em",
     },
     dateText: {
         fontSize: "0.84rem",
         color: "#94a3b8",
+        fontWeight: 500,
+    },
+    metaText: {
+        fontSize: "0.84rem",
+        color: "#cbd5e1",
+        fontWeight: 600,
     },
     deleteBtn: {
-        color: "#ef4444",
+        color: "#f87171",
+        border: "1px solid rgba(248,113,113,0.14)",
+        background: "rgba(239,68,68,0.06)",
         "&:hover": {
-            bgcolor: "rgba(239,68,68,0.12)",
+            bgcolor: "rgba(239,68,68,0.14)",
         },
     },
-    footerNote: {
+    emptyIconWrap: {
+        width: 70,
+        height: 70,
+        borderRadius: "22px",
+        display: "grid",
+        placeItems: "center",
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.06)",
+    },
+    footerInfo: {
         p: 2,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 1,
+    },
+    footerText: {
         color: "#64748b",
-        fontSize: 12,
+        fontSize: 12.5,
+        lineHeight: 1.7,
     },
 };

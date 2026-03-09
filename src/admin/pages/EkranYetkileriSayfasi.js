@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
     Box,
     Paper,
@@ -15,6 +15,9 @@ import {
     InputLabel,
     Fade,
     Chip,
+    Button,
+    IconButton,
+    Tooltip,
 } from "@mui/material";
 import {
     SearchRounded,
@@ -25,12 +28,15 @@ import {
     CheckCircleRounded,
     TuneRounded,
     ArrowForwardRounded,
+    DoneAllRounded,
+    BlockRounded,
+    RestartAltRounded,
 } from "@mui/icons-material";
 import { supabase } from "../../supabase";
 
-/**
- * ✅ MENÜ (UI grupları)
- */
+/* =========================
+   MENÜ
+========================= */
 const MENU = [
     { title: "ANA SAYFA", items: [{ kod: "anasayfa", label: "Ana Sayfa" }] },
     {
@@ -54,6 +60,7 @@ const MENU = [
 
 export default function EkranYetkileriSayfasi() {
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
     const [kullanicilar, setKullanicilar] = useState([]);
     const [ekranKodMap, setEkranKodMap] = useState({});
@@ -72,7 +79,6 @@ export default function EkranYetkileriSayfasi() {
 
     const fetchAll = async () => {
         setLoading(true);
-
         try {
             const [eRes, uRes, ueRes] = await Promise.all([
                 supabase.from("ekranlar").select("id,kod").eq("aktif", true),
@@ -80,34 +86,36 @@ export default function EkranYetkileriSayfasi() {
                     .from("kullanicilar")
                     .select("id, kullanici, mail")
                     .order("kullanici", { ascending: true }),
-                supabase.from("kullanici_ekran_yetkileri").select("kullanici_id, ekran_id, izin"),
+                supabase
+                    .from("kullanici_ekran_yetkileri")
+                    .select("kullanici_id, ekran_id, izin"),
             ]);
 
             if (eRes.error) throw eRes.error;
             if (uRes.error) throw uRes.error;
             if (ueRes.error) throw ueRes.error;
 
+            const ekranMap = {};
+            (eRes.data || []).forEach((x) => {
+                const kod = String(x.kod || "").trim();
+                if (kod) ekranMap[kod] = x.id;
+            });
+
             const users = uRes.data || [];
 
-            const map = {};
-            (eRes.data || []).forEach((x) => {
-                const k = String(x.kod || "").trim();
-                if (k) map[k] = x.id;
+            const izinMap = {};
+            (ueRes.data || []).forEach((x) => {
+                if (!izinMap[x.kullanici_id]) izinMap[x.kullanici_id] = {};
+                izinMap[x.kullanici_id][x.ekran_id] = !!x.izin;
             });
-            setEkranKodMap(map);
 
+            setEkranKodMap(ekranMap);
             setKullanicilar(users);
+            setUserYetkiMap(izinMap);
 
             if (!kullaniciId && users.length > 0) {
                 setKullaniciId(users[0].id);
             }
-
-            const um = {};
-            (ueRes.data || []).forEach((x) => {
-                if (!um[x.kullanici_id]) um[x.kullanici_id] = {};
-                um[x.kullanici_id][x.ekran_id] = !!x.izin;
-            });
-            setUserYetkiMap(um);
         } catch (err) {
             console.error("Veri çekme hatası:", err);
         } finally {
@@ -117,7 +125,6 @@ export default function EkranYetkileriSayfasi() {
 
     useEffect(() => {
         fetchAll();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const selectedUser = useMemo(
@@ -125,13 +132,15 @@ export default function EkranYetkileriSayfasi() {
         [kullanicilar, kullaniciId]
     );
 
-    const getUserIzinByEkranId = (ekranId) => {
-        return !!userYetkiMap?.[kullaniciId]?.[ekranId];
-    };
+    const getUserIzinByEkranId = useCallback(
+        (ekranId) => !!userYetkiMap?.[kullaniciId]?.[ekranId],
+        [userYetkiMap, kullaniciId]
+    );
 
     const toggleIzin = async (ekranId, nextVal) => {
-        setSavingKey(ekranId);
+        if (!kullaniciId || !ekranId) return;
 
+        setSavingKey(ekranId);
         try {
             const { error } = await supabase
                 .from("kullanici_ekran_yetkileri")
@@ -160,6 +169,50 @@ export default function EkranYetkileriSayfasi() {
         }
     };
 
+    const bulkSetPermissions = async (items, nextVal) => {
+        if (!kullaniciId || !items?.length) return;
+
+        const validItems = items
+            .map((it) => ({
+                ...it,
+                ekranId: ekranKodMap[it.kod] || null,
+            }))
+            .filter((it) => it.ekranId);
+
+        if (validItems.length === 0) return;
+
+        setSaving(true);
+        try {
+            const payload = validItems.map((it) => ({
+                kullanici_id: kullaniciId,
+                ekran_id: it.ekranId,
+                izin: !!nextVal,
+            }));
+
+            const { error } = await supabase
+                .from("kullanici_ekran_yetkileri")
+                .upsert(payload, { onConflict: "kullanici_id,ekran_id" });
+
+            if (error) throw error;
+
+            setUserYetkiMap((prev) => {
+                const current = { ...(prev[kullaniciId] || {}) };
+                validItems.forEach((it) => {
+                    current[it.ekranId] = !!nextVal;
+                });
+
+                return {
+                    ...prev,
+                    [kullaniciId]: current,
+                };
+            });
+        } catch (e) {
+            console.error("Toplu yetki güncelleme hatası:", e);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const filteredMenu = useMemo(() => {
         const q = norm(query.trim());
 
@@ -178,7 +231,7 @@ export default function EkranYetkileriSayfasi() {
 
             return { ...group, items };
         }).filter((g) => g.items.length > 0);
-    }, [query, onlyAllowed, kullaniciId, userYetkiMap, ekranKodMap]);
+    }, [query, onlyAllowed, ekranKodMap, getUserIzinByEkranId]);
 
     const totalModuleCount = useMemo(
         () => MENU.reduce((acc, group) => acc + group.items.length, 0),
@@ -201,7 +254,9 @@ export default function EkranYetkileriSayfasi() {
                 }, 0)
             );
         }, 0);
-    }, [ekranKodMap, kullaniciId, userYetkiMap]);
+    }, [ekranKodMap, getUserIzinByEkranId]);
+
+    const allMenuItems = useMemo(() => MENU.flatMap((g) => g.items), []);
 
     const selectedLabel = selectedUser
         ? `${selectedUser.kullanici} (${selectedUser.mail})`
@@ -225,15 +280,15 @@ export default function EkranYetkileriSayfasi() {
                         </Box>
 
                         <Box>
-                            <Typography sx={heroTitleSx}>Kullanıcı Yetki Yönetimi</Typography>
+                            <Typography sx={heroTitleSx}>Ekran Yetkileri</Typography>
                             <Typography sx={heroDescSx}>
-                                Ekran erişimlerini doğrudan kullanıcı bazlı yönetin.
+                                Sadece kullanıcı bazlı ekran erişimlerini yönetin.
                             </Typography>
 
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.6 }}>
                                 <Chip
                                     icon={<PersonRounded />}
-                                    label="Kullanıcı Bazlı Yönetim"
+                                    label="Sadece Kullanıcı Bazlı"
                                     sx={heroChipPrimarySx}
                                 />
                                 <Chip
@@ -266,25 +321,23 @@ export default function EkranYetkileriSayfasi() {
                             alignItems={{ xl: "center" }}
                             justifyContent="space-between"
                         >
-                            <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ flex: 1 }}>
-                                <Box sx={{ flex: 1, minWidth: 260 }}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel sx={{ color: "#94a3b8" }}>Kullanıcı Seçin</InputLabel>
-                                        <Select
-                                            value={kullaniciId}
-                                            label="Kullanıcı Seçin"
-                                            onChange={(e) => setKullaniciId(e.target.value)}
-                                            sx={selectSx}
-                                        >
-                                            {kullanicilar.map((u) => (
-                                                <MenuItem key={u.id} value={u.id}>
-                                                    {u.kullanici} ({u.mail})
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Box>
-                            </Stack>
+                            <Box sx={{ flex: 1, minWidth: 260 }}>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel sx={{ color: "#94a3b8" }}>Kullanıcı Seçin</InputLabel>
+                                    <Select
+                                        value={kullaniciId}
+                                        label="Kullanıcı Seçin"
+                                        onChange={(e) => setKullaniciId(e.target.value)}
+                                        sx={selectSx}
+                                    >
+                                        {kullanicilar.map((u) => (
+                                            <MenuItem key={u.id} value={u.id}>
+                                                {u.kullanici} ({u.mail})
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Box>
 
                             <Stack
                                 direction={{ xs: "column", sm: "row" }}
@@ -321,16 +374,42 @@ export default function EkranYetkileriSayfasi() {
                         </Stack>
 
                         <Stack
-                            direction={{ xs: "column", md: "row" }}
-                            spacing={1}
-                            alignItems={{ xs: "flex-start", md: "center" }}
+                            direction={{ xs: "column", lg: "row" }}
+                            spacing={1.2}
                             justifyContent="space-between"
+                            alignItems={{ xs: "stretch", lg: "center" }}
                         >
                             <Typography sx={subInfoTextSx}>
-                                Bu alanda verilen yetkiler doğrudan seçilen kullanıcı için uygulanır.
+                                Seçilen kullanıcı için ekran erişimlerini tek tek veya toplu güncelleyebilirsiniz.
                             </Typography>
 
-                            <Chip label={`${visibleModuleCount} modül gösteriliyor`} sx={miniInfoChipSx} />
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                                <Button
+                                    startIcon={<DoneAllRounded />}
+                                    onClick={() => bulkSetPermissions(allMenuItems, true)}
+                                    disabled={!kullaniciId || saving}
+                                    sx={bulkOpenBtnSx}
+                                >
+                                    Tümünü Aç
+                                </Button>
+
+                                <Button
+                                    startIcon={<BlockRounded />}
+                                    onClick={() => bulkSetPermissions(allMenuItems, false)}
+                                    disabled={!kullaniciId || saving}
+                                    sx={bulkCloseBtnSx}
+                                >
+                                    Tümünü Kapat
+                                </Button>
+
+                                <Tooltip title="Yenile">
+                                    <span>
+                                        <IconButton onClick={fetchAll} disabled={loading || saving} sx={refreshBtnSx}>
+                                            <RestartAltRounded />
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
+                            </Stack>
                         </Stack>
                     </Stack>
                 </Box>
@@ -352,144 +431,157 @@ export default function EkranYetkileriSayfasi() {
                                 Eşleşen modül bulunamadı
                             </Typography>
                             <Typography sx={{ color: "#94a3b8", mt: 0.5 }}>
-                                Arama veya filtre koşullarını değiştirerek tekrar deneyin.
+                                Arama veya filtreyi değiştirerek tekrar deneyin.
                             </Typography>
                         </Paper>
                     ) : (
                         <Stack spacing={3}>
-                            {filteredMenu.map((group, index) => (
-                                <Fade in timeout={300 + index * 120} key={group.title}>
-                                    <Paper elevation={0} sx={groupCardSx}>
-                                        <Stack
-                                            direction={{ xs: "column", md: "row" }}
-                                            spacing={1.5}
-                                            justifyContent="space-between"
-                                            alignItems={{ xs: "flex-start", md: "center" }}
-                                            sx={{ mb: 2.2 }}
-                                        >
-                                            <Stack direction="row" alignItems="center" spacing={1.2}>
-                                                <Box sx={groupBadgeSx} />
-                                                <Typography sx={groupTitleSx}>{group.title}</Typography>
-                                                <Chip
-                                                    size="small"
-                                                    label={`${group.items.length} modül`}
-                                                    sx={groupCountChipSx}
-                                                />
-                                            </Stack>
-                                        </Stack>
+                            {filteredMenu.map((group, index) => {
+                                const groupItems = group.items.filter((x) => x.ekranId);
 
-                                        <Box
-                                            sx={{
-                                                display: "grid",
-                                                gridTemplateColumns: {
-                                                    xs: "1fr",
-                                                    md: "1fr 1fr",
-                                                    xl: "1fr 1fr 1fr",
-                                                },
-                                                gap: 2,
-                                            }}
-                                        >
-                                            {group.items.map((it) => {
-                                                const disabled = !it.ekranId;
-                                                const isActive = !!it.izin;
+                                return (
+                                    <Fade in timeout={300 + index * 100} key={group.title}>
+                                        <Paper elevation={0} sx={groupCardSx}>
+                                            <Stack
+                                                direction={{ xs: "column", lg: "row" }}
+                                                spacing={1.5}
+                                                justifyContent="space-between"
+                                                alignItems={{ xs: "flex-start", lg: "center" }}
+                                                sx={{ mb: 2.2 }}
+                                            >
+                                                <Stack direction="row" alignItems="center" spacing={1.2}>
+                                                    <Box sx={groupBadgeSx} />
+                                                    <Typography sx={groupTitleSx}>{group.title}</Typography>
+                                                    <Chip
+                                                        size="small"
+                                                        label={`${group.items.length} modül`}
+                                                        sx={groupCountChipSx}
+                                                    />
+                                                </Stack>
 
-                                                return (
-                                                    <Paper
-                                                        key={it.kod}
-                                                        elevation={0}
-                                                        sx={{
-                                                            ...itemCardSx,
-                                                            border: isActive
-                                                                ? "1px solid rgba(59,130,246,0.35)"
-                                                                : "1px solid rgba(255,255,255,0.07)",
-                                                            background: isActive
-                                                                ? "linear-gradient(180deg, rgba(59,130,246,0.14) 0%, rgba(30,41,59,0.55) 100%)"
-                                                                : "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(15,23,42,0.55) 100%)",
-                                                            boxShadow: isActive
-                                                                ? "0 12px 30px rgba(37, 99, 235, 0.12)"
-                                                                : "0 12px 30px rgba(0,0,0,0.18)",
-                                                        }}
+                                                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                                                    <Button
+                                                        size="small"
+                                                        onClick={() => bulkSetPermissions(groupItems, true)}
+                                                        disabled={saving || groupItems.length === 0}
+                                                        sx={groupOpenBtnSx}
                                                     >
-                                                        <Stack
-                                                            direction="row"
-                                                            alignItems="flex-start"
-                                                            justifyContent="space-between"
-                                                            spacing={2}
-                                                            sx={{ width: "100%" }}
+                                                        Grubu Aç
+                                                    </Button>
+                                                    <Button
+                                                        size="small"
+                                                        onClick={() => bulkSetPermissions(groupItems, false)}
+                                                        disabled={saving || groupItems.length === 0}
+                                                        sx={groupCloseBtnSx}
+                                                    >
+                                                        Grubu Kapat
+                                                    </Button>
+                                                </Stack>
+                                            </Stack>
+
+                                            <Box
+                                                sx={{
+                                                    display: "grid",
+                                                    gridTemplateColumns: {
+                                                        xs: "1fr",
+                                                        md: "1fr 1fr",
+                                                        xl: "1fr 1fr 1fr",
+                                                    },
+                                                    gap: 2,
+                                                }}
+                                            >
+                                                {group.items.map((it) => {
+                                                    const disabled = !it.ekranId;
+                                                    const isActive = !!it.izin;
+
+                                                    return (
+                                                        <Paper
+                                                            key={it.kod}
+                                                            elevation={0}
+                                                            sx={{
+                                                                ...itemCardSx,
+                                                                border: isActive
+                                                                    ? "1px solid rgba(59,130,246,0.35)"
+                                                                    : "1px solid rgba(255,255,255,0.07)",
+                                                                background: isActive
+                                                                    ? "linear-gradient(180deg, rgba(59,130,246,0.14) 0%, rgba(30,41,59,0.55) 100%)"
+                                                                    : "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(15,23,42,0.55) 100%)",
+                                                            }}
                                                         >
-                                                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                                <Stack
-                                                                    direction="row"
-                                                                    spacing={1}
-                                                                    alignItems="center"
-                                                                    flexWrap="wrap"
-                                                                    useFlexGap
-                                                                >
-                                                                    <Typography
-                                                                        sx={{
-                                                                            color: "#fff",
-                                                                            fontWeight: 800,
-                                                                            fontSize: "0.97rem",
-                                                                            letterSpacing: "-0.01em",
-                                                                        }}
+                                                            <Stack
+                                                                direction="row"
+                                                                alignItems="flex-start"
+                                                                justifyContent="space-between"
+                                                                spacing={2}
+                                                                sx={{ width: "100%" }}
+                                                            >
+                                                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                                    <Stack
+                                                                        direction="row"
+                                                                        spacing={1}
+                                                                        alignItems="center"
+                                                                        flexWrap="wrap"
+                                                                        useFlexGap
                                                                     >
-                                                                        {it.label}
+                                                                        <Typography sx={moduleTitleSx}>
+                                                                            {it.label}
+                                                                        </Typography>
+
+                                                                        <Chip
+                                                                            size="small"
+                                                                            label={
+                                                                                disabled
+                                                                                    ? "Tanımsız"
+                                                                                    : isActive
+                                                                                        ? "Açık"
+                                                                                        : "Kapalı"
+                                                                            }
+                                                                            sx={
+                                                                                disabled
+                                                                                    ? statusChipErrorSx
+                                                                                    : isActive
+                                                                                        ? statusChipSuccessSx
+                                                                                        : statusChipMutedSx
+                                                                            }
+                                                                        />
+                                                                    </Stack>
+
+                                                                    <Typography sx={moduleCodeSx}>
+                                                                        Kod: {it.kod}
                                                                     </Typography>
 
-                                                                    <Chip
-                                                                        size="small"
-                                                                        label={
-                                                                            disabled
-                                                                                ? "Tanımsız"
-                                                                                : isActive
-                                                                                    ? "İzinli"
-                                                                                    : "Kapalı"
-                                                                        }
-                                                                        sx={
-                                                                            disabled
-                                                                                ? statusChipErrorSx
-                                                                                : isActive
-                                                                                    ? statusChipSuccessSx
-                                                                                    : statusChipMutedSx
-                                                                        }
+                                                                    {disabled ? (
+                                                                        <Typography sx={missingTextSx}>
+                                                                            ekranlar tablosunda bu koda ait kayıt bulunamadı.
+                                                                        </Typography>
+                                                                    ) : (
+                                                                        <Typography sx={moduleSubTextSx}>
+                                                                            Bu ekran için kullanıcıya özel izin verilir.
+                                                                        </Typography>
+                                                                    )}
+                                                                </Box>
+
+                                                                <Stack direction="row" spacing={1} alignItems="center" sx={{ pt: 0.5 }}>
+                                                                    {savingKey === it.ekranId && (
+                                                                        <CircularProgress size={16} sx={{ color: "#60a5fa" }} />
+                                                                    )}
+
+                                                                    <Switch
+                                                                        checked={isActive}
+                                                                        disabled={disabled || saving}
+                                                                        onChange={(ev) => toggleIzin(it.ekranId, ev.target.checked)}
+                                                                        sx={modernSwitchSx}
                                                                     />
                                                                 </Stack>
-
-                                                                <Typography sx={moduleCodeSx}>
-                                                                    Kod: {it.kod}
-                                                                </Typography>
-
-                                                                {disabled ? (
-                                                                    <Typography sx={missingTextSx}>
-                                                                        DB tanımı eksik. ekranlar tablosunda bu koda ait kayıt bulunamadı.
-                                                                    </Typography>
-                                                                ) : (
-                                                                    <Typography sx={moduleSubTextSx}>
-                                                                        Bu modül için kullanıcı yetkisi doğrudan yönetiliyor.
-                                                                    </Typography>
-                                                                )}
-                                                            </Box>
-
-                                                            <Stack direction="row" spacing={1} alignItems="center" sx={{ pt: 0.5 }}>
-                                                                {savingKey === it.ekranId && (
-                                                                    <CircularProgress size={16} sx={{ color: "#60a5fa" }} />
-                                                                )}
-
-                                                                <Switch
-                                                                    checked={isActive}
-                                                                    disabled={disabled}
-                                                                    onChange={(ev) => toggleIzin(it.ekranId, ev.target.checked)}
-                                                                    sx={modernSwitchSx}
-                                                                />
                                                             </Stack>
-                                                        </Stack>
-                                                    </Paper>
-                                                );
-                                            })}
-                                        </Box>
-                                    </Paper>
-                                </Fade>
-                            ))}
+                                                        </Paper>
+                                                    );
+                                                })}
+                                            </Box>
+                                        </Paper>
+                                    </Fade>
+                                );
+                            })}
                         </Stack>
                     )}
                 </Box>
@@ -512,7 +604,7 @@ function StatCard({ icon, label, value }) {
     );
 }
 
-// STYLES
+/* STYLES */
 
 const pageSx = {
     position: "relative",
@@ -702,25 +794,10 @@ const subInfoTextSx = {
     fontWeight: 500,
 };
 
-const miniInfoChipSx = {
-    bgcolor: "rgba(59,130,246,0.12)",
-    color: "#bfdbfe",
-    border: "1px solid rgba(59,130,246,0.16)",
-    fontWeight: 700,
-};
-
 const contentWrapSx = {
     p: { xs: 2, md: 3 },
     maxHeight: "68vh",
     overflowY: "auto",
-    "&::-webkit-scrollbar": { width: 8 },
-    "&::-webkit-scrollbar-thumb": {
-        bgcolor: "rgba(255,255,255,0.12)",
-        borderRadius: 999,
-    },
-    "&::-webkit-scrollbar-track": {
-        bgcolor: "transparent",
-    },
 };
 
 const emptyStateSx = {
@@ -769,11 +846,13 @@ const itemCardSx = {
     alignItems: "center",
     transition: "all 0.22s ease",
     backdropFilter: "blur(8px)",
-    "&:hover": {
-        transform: "translateY(-3px)",
-        boxShadow: "0 16px 34px rgba(0,0,0,0.26)",
-        borderColor: "rgba(96,165,250,0.22)",
-    },
+};
+
+const moduleTitleSx = {
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: "0.97rem",
+    letterSpacing: "-0.01em",
 };
 
 const moduleCodeSx = {
@@ -828,12 +907,8 @@ const statusChipErrorSx = {
 };
 
 const modernSwitchSx = {
-    "& .MuiSwitch-switchBase": {
-        transitionDuration: "220ms",
-    },
     "& .MuiSwitch-switchBase.Mui-checked": {
         color: "#60a5fa",
-        "&:hover": { bgcolor: "rgba(59, 130, 246, 0.10)" },
     },
     "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
         bgcolor: "#2563eb",
@@ -844,4 +919,49 @@ const modernSwitchSx = {
         opacity: 1,
         borderRadius: 20,
     },
+};
+
+const bulkOpenBtnSx = {
+    borderRadius: 2.5,
+    textTransform: "none",
+    fontWeight: 800,
+    color: "#d1fae5",
+    bgcolor: "rgba(16,185,129,0.14)",
+    border: "1px solid rgba(16,185,129,0.2)",
+    "&:hover": { bgcolor: "rgba(16,185,129,0.22)" },
+};
+
+const bulkCloseBtnSx = {
+    borderRadius: 2.5,
+    textTransform: "none",
+    fontWeight: 800,
+    color: "#fecaca",
+    bgcolor: "rgba(239,68,68,0.14)",
+    border: "1px solid rgba(239,68,68,0.2)",
+    "&:hover": { bgcolor: "rgba(239,68,68,0.22)" },
+};
+
+const refreshBtnSx = {
+    color: "#cbd5e1",
+    bgcolor: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+};
+
+const groupOpenBtnSx = {
+    borderRadius: 2,
+    textTransform: "none",
+    fontWeight: 700,
+    color: "#bfdbfe",
+    border: "1px solid rgba(59,130,246,0.18)",
+    bgcolor: "rgba(59,130,246,0.10)",
+};
+
+const groupCloseBtnSx = {
+    borderRadius: 2,
+    textTransform: "none",
+    fontWeight: 700,
+    color: "#fecaca",
+    border: "1px solid rgba(239,68,68,0.18)",
+    bgcolor: "rgba(239,68,68,0.10)",
 };
