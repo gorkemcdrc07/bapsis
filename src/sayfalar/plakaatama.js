@@ -541,6 +541,14 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             .trim();
     }, []);
 
+    const normalizeStopName = useCallback((v) => {
+        return String(v ?? "")
+            .trim()
+            .toLocaleUpperCase("tr-TR")
+            .replace(/\s+/g, " ")
+            .replace(/-\s*\d+\s*$/, "") // sondaki -1, -2, -3 kaldır
+            .trim();
+    }, []);
     const mapDbToRow = useCallback((r) => {
         const id = r?.id ?? `${r?.batch_id ?? "batch"}_${r?.line_no ?? Math.random()}`;
         const nav = r?.navlun ?? "";
@@ -691,7 +699,12 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             const v2 = clean(varis2);
             const v3 = clean(varis3);
 
-            if (!v1) return null;
+            if (!v1) {
+                return {
+                    navlun: null,
+                    matchedCok: false,
+                };
+            }
 
             const getTekNavlun = async (nokta) => {
                 const raw = clean(nokta);
@@ -735,6 +748,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
                 return normRes.data?.[0]?.navlun ?? null;
             };
+
             const maxNavlun = (...vals) => {
                 const nums = vals.map((x) => toNumber(x)).filter((x) => x != null);
                 if (nums.length === 0) return null;
@@ -755,14 +769,30 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
                 if (error) {
                     console.error("fetchNavlunFromSartlari COK(123) error:", error);
-                    return null;
+                    return {
+                        navlun: null,
+                        matchedCok: false,
+                    };
                 }
 
                 const exactNav = data?.[0]?.navlun ?? null;
-                if (exactNav != null && exactNav !== "") return exactNav;
+                if (exactNav != null && exactNav !== "") {
+                    return {
+                        navlun: exactNav,
+                        matchedCok: true,
+                    };
+                }
 
-                const [n1, n2, n3] = await Promise.all([getTekNavlun(v1), getTekNavlun(v2), getTekNavlun(v3)]);
-                return maxNavlun(n1, n2, n3);
+                const [n1, n2, n3] = await Promise.all([
+                    getTekNavlun(v1),
+                    getTekNavlun(v2),
+                    getTekNavlun(v3),
+                ]);
+
+                return {
+                    navlun: maxNavlun(n1, n2, n3),
+                    matchedCok: false,
+                };
             }
 
             if (v1 && v2) {
@@ -801,18 +831,27 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                                 : candEmpty;
 
                 if (bestExact?.navlun != null && bestExact?.navlun !== "") {
-                    return bestExact.navlun;
+                    return {
+                        navlun: bestExact.navlun,
+                        matchedCok: true,
+                    };
                 }
 
                 const [n1, n2] = await Promise.all([getTekNavlun(v1), getTekNavlun(v2)]);
-                return maxNavlun(n1, n2);
+
+                return {
+                    navlun: maxNavlun(n1, n2),
+                    matchedCok: false,
+                };
             }
 
-            return await getTekNavlun(v1);
+            return {
+                navlun: await getTekNavlun(v1),
+                matchedCok: false,
+            };
         },
         [supabase, normalizeVarisBase]
     );
-
     const fetchUgramaBedeli = useCallback(
         async (vkn) => {
             const cleanVkn = normDigits(vkn);
@@ -859,11 +898,14 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
             let baseNavlun = row.__navlunBase ?? row.navlun ?? "";
 
-            const rotaNav = await fetchNavlunFromSartlari({
+            const rotaResult = await fetchNavlunFromSartlari({
                 varis1: row.varis1,
                 varis2: row.varis2,
                 varis3: row.varis3,
             });
+
+            const rotaNav = rotaResult?.navlun ?? null;
+            const matchedCokNavlun = rotaResult?.matchedCok === true;
 
             if (rotaNav != null && rotaNav !== "") {
                 baseNavlun = rotaNav;
@@ -879,7 +921,8 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 }
 
                 baseNavlun = fallbackNavlun;
-            }            let ugramaBedeliRaw = null;
+            }
+            let ugramaBedeliRaw = null;
             let ugramaBedeli = null;
             let navlunAfterUgrama = toNumber(baseNavlun);
 
@@ -890,14 +933,27 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             const b2 = normalizeVarisBase(row.varis2);
             const b3 = normalizeVarisBase(row.varis3);
 
+            const s1 = normalizeStopName(row.varis1);
+            const s2 = normalizeStopName(row.varis2);
+
             const uniqueStops = new Set([b1, b2, b3].filter(Boolean));
             const uniqueStopCount = uniqueStops.size;
+
+            // ✅ İstisna:
+            // varis1 = DENİZLİ ve varis2 = AYDIN ise uğrama yok
+            // varis1 = DENİZLİ ve varis2 = MUĞLA ise uğrama yok
+            const isNoUgramaException =
+                (
+                    s1 === "DENİZLİ" &&
+                    (s2 === "AYDIN" || s2 === "MUĞLA")
+                ) ||
+                matchedCokNavlun;
 
             if (cleanRowVkn && navlunAfterUgrama != null) {
                 ugramaBedeliRaw = await fetchUgramaBedeli(cleanRowVkn);
                 ugramaBedeli = toNumber(ugramaBedeliRaw);
 
-                if (ugramaBedeli != null) {
+                if (ugramaBedeli != null && !isNoUgramaException) {
                     if (uniqueStopCount >= 3) {
                         navlunAfterUgrama = navlunAfterUgrama + ugramaBedeli * 2;
                     } else if (uniqueStopCount === 2) {
@@ -906,7 +962,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     // uniqueStopCount === 1 ise uğrama yok
                 }
             }
-
             const finalBaseNavlun = navlunAfterUgrama != null ? navlunAfterUgrama : baseNavlun;
 
             const hasDataloger = String(row.datalogerno ?? "").trim() !== "";
@@ -946,6 +1001,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             patchRow,
             normDigits,
             normalizeVarisBase,
+            normalizeStopName,
             isDirectFiloVkn,
         ]
     );
