@@ -9,6 +9,8 @@ import {
     IconButton,
     CircularProgress,
     Alert,
+    Chip,
+    Tooltip,
 } from "@mui/material";
 import {
     Timeline,
@@ -20,23 +22,24 @@ import {
     InfoOutlined,
     OpenInNew,
     ArrowForwardIos,
+    WarningAmber,
+    PersonOutline,
+    FactCheck,
+    Autorenew,
 } from "@mui/icons-material";
 import { motion } from "framer-motion";
-
 import { supabase } from "../supabase";
 
 export default function Anasayfa({ kullanici }) {
-    const isim =
-        kullanici?.kullanici || kullanici?.mail?.split("@")[0]?.toUpperCase() || "KULLANICI";
+    const isim = kullanici?.kullanici?.toUpperCase() || "KULLANICI";
 
     const [loading, setLoading] = useState(true);
     const [hata, setHata] = useState("");
 
-    // plakalar = master tablo (aktif/pasif filo vs için)
     const [plakalarRows, setPlakalarRows] = useState([]);
-
-    // plaka_atamalar = operasyon kayıtları
     const [atamalarRows, setAtamalarRows] = useState([]);
+    const [tamamlananRows, setTamamlananRows] = useState([]);
+    const [akışFiltre, setAkışFiltre] = useState("tum");
 
     useEffect(() => {
         let alive = true;
@@ -46,7 +49,7 @@ export default function Anasayfa({ kullanici }) {
             setHata("");
 
             try {
-                const [plakalarRes, atamalarRes] = await Promise.all([
+                const [plakalarRes, atamalarRes, tamamlananRes] = await Promise.all([
                     supabase
                         .from("plakalar")
                         .select("id,cekici,dorse,ad_soyad,telefon,tc_no,statu,updated_at")
@@ -56,18 +59,26 @@ export default function Anasayfa({ kullanici }) {
                     supabase
                         .from("plaka_atamalar")
                         .select(
-                            "id,batch_id,seferno,sevktarihi,yukleyendepo,kalkis,araccinsi,cekici,dorse,tc,surucu,telefon,faturavkn,varis1,varis2,varis3,irsaliyeno,datalogerno,navlun,teslimattarihsaat,updated_at,updated_by_email,updated_by_name,line_no"
+                            "id,batch_id,seferno,sevktarihi,yukleyendepo,kalkis,araccinsi,cekici,dorse,tc,surucu,telefon,faturavkn,varis1,varis2,varis3,irsaliyeno,datalogerno,navlun,teslimattarihsaat,updated_at,updated_by_name,line_no"
                         )
+                        .order("updated_at", { ascending: false })
+                        .limit(2000),
+
+                    supabase
+                        .from("tamamlanan_seferler")
+                        .select("id,updated_at,teslimattarihsaat")
                         .order("updated_at", { ascending: false })
                         .limit(2000),
                 ]);
 
                 if (plakalarRes.error) throw plakalarRes.error;
                 if (atamalarRes.error) throw atamalarRes.error;
+                if (tamamlananRes.error) throw tamamlananRes.error;
 
                 if (!alive) return;
                 setPlakalarRows(plakalarRes.data || []);
                 setAtamalarRows(atamalarRes.data || []);
+                setTamamlananRows(tamamlananRes.data || []);
             } catch (e) {
                 if (!alive) return;
                 setHata(e?.message || "Veriler yüklenirken hata oluştu.");
@@ -87,20 +98,24 @@ export default function Anasayfa({ kullanici }) {
         const now = new Date();
         const normalize = (v) => (v ?? "").toString().trim();
 
-        // ✅ İSTENEN: Günlük sefer = tabloda kaç satır varsa
+        const isSameDay = (dateA, dateB) =>
+            dateA.getFullYear() === dateB.getFullYear() &&
+            dateA.getMonth() === dateB.getMonth() &&
+            dateA.getDate() === dateB.getDate();
+
         const gunlukSefer = atamalarRows.length;
 
-        // ✅ İSTENEN: Bekleyen = cekici ve dorse BOŞ olan satırlar
-        // (Sadece biri boşsa sayma demişsin; ikisi de boş olanları sayıyoruz)
         const bekleyen = atamalarRows.filter(
             (r) => !normalize(r.cekici) && !normalize(r.dorse)
         ).length;
 
-        // ✅ Tamamlanan: teslimattarihsaat doluysa
-        const tamamlanan = atamalarRows.filter((r) => !!normalize(r.teslimattarihsaat)).length;
+        const tamamlanan = tamamlananRows.filter((r) => {
+            if (!r?.updated_at) return false;
+            const dt = new Date(r.updated_at);
+            if (Number.isNaN(dt.getTime())) return false;
+            return isSameDay(dt, now);
+        }).length;
 
-        // ✅ Aktif filo: atamalarda geçen benzersiz çekici sayısı
-        // (çekici yoksa plakalar.statu='aktif' yedek)
         const uniqueCekici = new Set(atamalarRows.map((r) => normalize(r.cekici)).filter(Boolean));
         let aktifFilo = uniqueCekici.size;
 
@@ -113,9 +128,41 @@ export default function Anasayfa({ kullanici }) {
             aktifFilo = setA.size;
         }
 
-        // Canlı akış: son güncellenen 8 atama
-        const liveFeed = atamalarRows.slice(0, 8).map((r) => {
-            const critical = !normalize(r.cekici) || !normalize(r.dorse);
+        const minutesAgoText = (d) => {
+            if (!d) return "—";
+            const diffMs = now.getTime() - d.getTime();
+            const mins = Math.max(0, Math.round(diffMs / 60000));
+            if (mins < 60) return `${mins} dk önce`;
+            const hrs = Math.round(mins / 60);
+            if (hrs < 24) return `${hrs} sa önce`;
+            const days = Math.round(hrs / 24);
+            return `${days} gün önce`;
+        };
+
+        const classifyRow = (r) => {
+            const cekiciBos = !normalize(r.cekici);
+            const dorseBos = !normalize(r.dorse);
+            const surucuBos = !normalize(r.surucu);
+            const telefonBos = !normalize(r.telefon);
+            const teslimVar = !!normalize(r.teslimattarihsaat);
+
+            const kritik = cekiciBos || dorseBos || surucuBos || telefonBos;
+
+            let durum = "guncel";
+            if (teslimVar) durum = "teslim";
+            else if (cekiciBos && dorseBos) durum = "bekliyor";
+            else if (kritik) durum = "kritik";
+            else if (normalize(r.cekici) || normalize(r.dorse)) durum = "atandi";
+
+            return {
+                kritik,
+                durum,
+                teslimVar,
+            };
+        };
+
+        const liveFeedRaw = atamalarRows.slice(0, 12).map((r) => {
+            const state = classifyRow(r);
             const sefer = normalize(r.seferno) || normalize(r.line_no) || normalize(r.id) || "—";
 
             const driverName = normalize(r.surucu) || "—";
@@ -123,6 +170,7 @@ export default function Anasayfa({ kullanici }) {
             const driverTc = normalize(r.tc) || "—";
 
             const title = `Sefer #${sefer} • ${normalize(r.kalkis) || "—"} → ${normalize(r.varis1) || "—"}`;
+
             const sub = [
                 `Sürücü: ${driverName} (Tel: ${driverPhone}, TC: ${driverTc})`,
                 `Çekici: ${normalize(r.cekici) || "—"} • Dorse: ${normalize(r.dorse) || "—"}`,
@@ -133,66 +181,156 @@ export default function Anasayfa({ kullanici }) {
 
             return {
                 id: r.id,
-                critical,
+                ...state,
                 title,
                 sub,
                 updatedAt: r.updated_at ? new Date(r.updated_at) : null,
             };
         });
 
-        const minutesAgoText = (d) => {
-            if (!d) return "—";
-            const diffMs = now.getTime() - d.getTime();
-            const mins = Math.max(0, Math.round(diffMs / 60000));
-            if (mins < 60) return `${mins} dk önce`;
-            const hrs = Math.round(mins / 60);
-            return `${hrs} sa önce`;
-        };
+        const recentActions = atamalarRows.slice(0, 10).map((r) => {
+            const userName = normalize(r.updated_by_name) || "Bilinmeyen kullanıcı";
+            const sefer = normalize(r.seferno) || normalize(r.line_no) || normalize(r.id) || "—";
+            const state = classifyRow(r);
 
-        // Skor (basit, tamamen opsiyonel)
+            let actionType = "Kayıt güncellendi";
+            if (state.teslimVar) actionType = "Teslim bilgisi işlendi";
+            else if (normalize(r.cekici) || normalize(r.dorse)) actionType = "Araç ataması yapıldı";
+            else if (state.kritik) actionType = "Eksik veri ile kayıt güncellendi";
+
+            return {
+                id: `action-${r.id}`,
+                userName,
+                actionType,
+                sefer,
+                route: `${normalize(r.kalkis) || "—"} → ${normalize(r.varis1) || "—"}`,
+                updatedAt: r.updated_at ? new Date(r.updated_at) : null,
+                durum: state.durum,
+            };
+        });
+
+        const userMap = new Map();
+        atamalarRows.forEach((r) => {
+            const key = normalize(r.updated_by_name) || `bilinmeyen-${r.id}`;
+            const name = normalize(r.updated_by_name) || "Bilinmeyen kullanıcı";
+            const state = classifyRow(r);
+
+            if (!userMap.has(key)) {
+                userMap.set(key, {
+                    key,
+                    name,
+                    total: 0,
+                    teslim: 0,
+                    atama: 0,
+                    kritik: 0,
+                });
+            }
+
+            const item = userMap.get(key);
+            item.total += 1;
+
+            if (state.teslimVar) item.teslim += 1;
+            if (normalize(r.cekici) || normalize(r.dorse)) item.atama += 1;
+            if (state.kritik) item.kritik += 1;
+        });
+
+        const topUsers = Array.from(userMap.values())
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 6);
+
+        const kritikKayitlar = atamalarRows.filter((r) => classifyRow(r).kritik).length;
+
+        const tamDoluKayitlar = atamalarRows.filter((r) => {
+            return (
+                normalize(r.cekici) &&
+                normalize(r.dorse) &&
+                normalize(r.surucu) &&
+                normalize(r.telefon)
+            );
+        }).length;
+
+        const veriKaliteOrani = gunlukSefer
+            ? Math.round((tamDoluKayitlar / gunlukSefer) * 100)
+            : 0;
+
         const hedefGunluk = 30;
         const deliveryRate = gunlukSefer ? tamamlanan / gunlukSefer : 0;
         const assignmentHealth = gunlukSefer ? 1 - bekleyen / gunlukSefer : 0;
         const goalHealth = Math.min(1, gunlukSefer / hedefGunluk);
-        const skor = Math.round((deliveryRate * 0.45 + assignmentHealth * 0.35 + goalHealth * 0.2) * 100);
+        const kaliteHealth = veriKaliteOrani / 100;
+
+        const skor = Math.round(
+            (deliveryRate * 0.35 +
+                assignmentHealth * 0.3 +
+                goalHealth * 0.15 +
+                kaliteHealth * 0.2) *
+            100
+        );
 
         const pctAssignment = Math.max(0, Math.min(100, Math.round(assignmentHealth * 100)));
         const pctDelivery = Math.max(0, Math.min(100, Math.round(deliveryRate * 100)));
 
+        const kritikBekleyenler = atamalarRows
+            .filter((r) => classifyRow(r).kritik)
+            .slice(0, 5)
+            .map((r) => {
+                const sefer = normalize(r.seferno) || normalize(r.line_no) || normalize(r.id) || "—";
+                return {
+                    id: `kritik-${r.id}`,
+                    text: `Sefer #${sefer} • ${normalize(r.kalkis) || "—"} → ${normalize(r.varis1) || "—"} • Eksik veri mevcut`,
+                };
+            });
+
         return {
-            hedefGunluk,
             gunlukSefer,
             bekleyen,
             tamamlanan,
             aktifFilo,
-            liveFeed,
+            liveFeedRaw,
+            recentActions,
+            topUsers,
+            kritikKayitlar,
+            veriKaliteOrani,
+            kritikBekleyenler,
             minutesAgoText,
             skor,
             pctAssignment,
             pctDelivery,
         };
-    }, [plakalarRows, atamalarRows]);
+    }, [plakalarRows, atamalarRows, tamamlananRows]);
+
+    const liveFeed = useMemo(() => {
+        if (akışFiltre === "tum") return hesap.liveFeedRaw;
+        if (akışFiltre === "kritik") {
+            return hesap.liveFeedRaw.filter((x) => x.durum === "kritik" || x.durum === "bekliyor");
+        }
+        if (akışFiltre === "teslim") {
+            return hesap.liveFeedRaw.filter((x) => x.durum === "teslim");
+        }
+        if (akışFiltre === "bekleyen") {
+            return hesap.liveFeedRaw.filter((x) => x.durum === "bekliyor");
+        }
+        return hesap.liveFeedRaw;
+    }, [hesap.liveFeedRaw, akışFiltre]);
 
     return (
         <Box sx={stil.anaKonteyner}>
-            {/* Dinamik Arka Plan */}
             <Box sx={stil.arkaPlanEfektleri}>
                 <motion.div
-                    animate={{ scale: [1, 1.3, 1], rotate: [0, 90, 0], opacity: [0.3, 0.5, 0.3] }}
+                    animate={{ scale: [1, 1.25, 1], rotate: [0, 90, 0], opacity: [0.25, 0.45, 0.25] }}
                     transition={{ duration: 20, repeat: Infinity }}
                     style={stil.parlama1}
                 />
                 <motion.div
-                    animate={{ scale: [1.3, 1, 1.3], rotate: [90, 0, 90], opacity: [0.2, 0.4, 0.2] }}
+                    animate={{ scale: [1.15, 1, 1.15], rotate: [90, 0, 90], opacity: [0.15, 0.35, 0.15] }}
                     transition={{ duration: 15, repeat: Infinity }}
                     style={stil.parlama2}
                 />
             </Box>
 
             <Container maxWidth="xl" sx={{ position: "relative", zIndex: 1 }}>
-                {/* Üst Bar */}
                 <Box sx={stil.ustBar}>
-                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+                    <motion.div initial={{ opacity: 0, y: -18 }} animate={{ opacity: 1, y: 0 }}>
                         <Typography variant="h3" sx={stil.baslik}>
                             ODAK <span style={{ color: "#3b82f6" }}>LOJİSTİK</span>
                         </Typography>
@@ -201,101 +339,170 @@ export default function Anasayfa({ kullanici }) {
                         </Typography>
                     </motion.div>
 
-                    <Box sx={{ display: "flex", gap: 2 }}>
-                        <IconButton sx={stil.ustButon}>
-                            <NotificationsNone />
-                        </IconButton>
-                        <IconButton sx={stil.ustButon}>
-                            <InfoOutlined />
-                        </IconButton>
+                    <Box sx={{ display: "flex", gap: 1.25 }}>
+                        <Tooltip title="Bildirimler">
+                            <IconButton sx={stil.ustButon}>
+                                <NotificationsNone />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Bilgilendirme">
+                            <IconButton sx={stil.ustButon}>
+                                <InfoOutlined />
+                            </IconButton>
+                        </Tooltip>
                     </Box>
                 </Box>
 
                 {hata ? (
-                    <Alert severity="error" sx={{ mb: 3 }}>
+                    <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>
                         {hata}
                     </Alert>
                 ) : null}
 
                 {loading ? (
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 4 }}>
-                        <CircularProgress size={20} />
+                    <Box sx={stil.loadingWrap}>
+                        <CircularProgress size={22} />
                         <Typography sx={{ color: "#94a3b8" }}>Veriler yükleniyor…</Typography>
                     </Box>
                 ) : null}
 
-                {/* Dashboard Kartları */}
-                <Grid container spacing={3} sx={{ mb: 6 }}>
-                    <Grid item xs={12} sm={6} md={3}>
+                <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
+                    <Grid item xs={12} sm={6} md={4} lg={2}>
                         <ModernKart
                             ikon={<Timeline />}
                             baslik="GÜNLÜK SEFER"
                             deger={String(hesap.gunlukSefer).padStart(2, "0")}
                             alt="plaka_atamalar satır sayısı"
                             renk="#3b82f6"
-                            delay={0.1}
+                            delay={0.03}
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={3}>
+                    <Grid item xs={12} sm={6} md={4} lg={2}>
                         <ModernKart
                             ikon={<AssignmentLate />}
                             baslik="BEKLEYEN"
                             deger={String(hesap.bekleyen).padStart(2, "0")}
                             alt="çekici + dorse boş"
                             renk="#f59e0b"
-                            delay={0.2}
+                            delay={0.06}
                             alert
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={3}>
+                    <Grid item xs={12} sm={6} md={4} lg={2}>
                         <ModernKart
                             ikon={<CheckCircleOutline />}
                             baslik="TAMAMLANAN"
                             deger={String(hesap.tamamlanan).padStart(2, "0")}
-                            alt="teslimattarihsaat dolu"
+                            alt="bugün tamamlanan seferler"
                             renk="#10b981"
-                            delay={0.3}
+                            delay={0.09}
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={3}>
+                    <Grid item xs={12} sm={6} md={4} lg={2}>
                         <ModernKart
                             ikon={<Speed />}
                             baslik="AKTİF FİLO"
                             deger={String(hesap.aktifFilo).padStart(2, "0")}
                             alt="benzersiz çekici"
                             renk="#8b5cf6"
-                            delay={0.4}
+                            delay={0.12}
+                        />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                        <ModernKart
+                            ikon={<WarningAmber />}
+                            baslik="KRİTİK KAYIT"
+                            deger={String(hesap.kritikKayitlar).padStart(2, "0")}
+                            alt="eksik araç / sürücü / telefon"
+                            renk="#ef4444"
+                            delay={0.15}
+                            alert
+                        />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                        <ModernKart
+                            ikon={<FactCheck />}
+                            baslik="VERİ KALİTESİ"
+                            deger={`%${hesap.veriKaliteOrani}`}
+                            alt="tam dolu kayıt oranı"
+                            renk="#14b8a6"
+                            delay={0.18}
                         />
                     </Grid>
                 </Grid>
 
-                {/* Operasyon & Analiz */}
-                <Grid container spacing={4}>
-                    <Grid item xs={12} lg={7}>
-                        <PanelKarti baslik="Canlı Operasyon Akışı" alt="Son güncellenen atamalar (sürücü detaylı)">
+                <Grid container spacing={2.5} sx={{ mb: 2 }}>
+                    <Grid item xs={12} xl={8}>
+                        <PanelKarti
+                            baslik="Canlı Operasyon Akışı"
+                            alt="Son güncellenen atamalar"
+                            minHeight={430}
+                            sagAlan={
+                                <Box sx={stil.filtreAlan}>
+                                    <MiniFilter
+                                        label="Tümü"
+                                        aktif={akışFiltre === "tum"}
+                                        onClick={() => setAkışFiltre("tum")}
+                                    />
+                                    <MiniFilter
+                                        label="Kritik"
+                                        aktif={akışFiltre === "kritik"}
+                                        onClick={() => setAkışFiltre("kritik")}
+                                    />
+                                    <MiniFilter
+                                        label="Teslim"
+                                        aktif={akışFiltre === "teslim"}
+                                        onClick={() => setAkışFiltre("teslim")}
+                                    />
+                                    <MiniFilter
+                                        label="Bekleyen"
+                                        aktif={akışFiltre === "bekleyen"}
+                                        onClick={() => setAkışFiltre("bekleyen")}
+                                    />
+                                </Box>
+                            }
+                        >
                             <Box sx={stil.listeKonteyner}>
-                                {hesap.liveFeed.length === 0 ? (
+                                {liveFeed.length === 0 ? (
                                     <Typography sx={{ color: "#64748b" }}>Kayıt bulunamadı.</Typography>
                                 ) : (
-                                    hesap.liveFeed.map((row) => (
-                                        <motion.div key={row.id} whileHover={{ x: 10 }} style={stil.listeEleman}>
-                                            <Box
-                                                sx={{
-                                                    ...stil.durumNokta,
-                                                    bgcolor: row.critical ? "#ef4444" : "#10b981",
-                                                }}
-                                            />
-                                            <Box sx={{ flex: 1 }}>
-                                                <Typography sx={stil.listeMetin}>{row.title}</Typography>
-                                                <Typography sx={stil.listeAltMetin}>{row.sub}</Typography>
+                                    liveFeed.map((row) => (
+                                        <motion.div
+                                            key={row.id}
+                                            whileHover={{ x: 4 }}
+                                            style={stil.listeElemanMotion}
+                                        >
+                                            <Box sx={stil.feedItem}>
+                                                <Box
+                                                    sx={{
+                                                        ...stil.durumNokta,
+                                                        ...(row.durum === "teslim" && { bgcolor: "#10b981" }),
+                                                        ...(row.durum === "bekliyor" && { bgcolor: "#f59e0b" }),
+                                                        ...(row.durum === "kritik" && { bgcolor: "#ef4444" }),
+                                                        ...(row.durum === "atandi" && { bgcolor: "#3b82f6" }),
+                                                        ...(row.durum === "guncel" && { bgcolor: "#64748b" }),
+                                                    }}
+                                                />
+                                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                    <Typography sx={stil.listeMetin}>{row.title}</Typography>
+                                                    <Typography sx={stil.listeAltMetin}>{row.sub}</Typography>
+                                                </Box>
+
+                                                <Box sx={stil.sagBilgiAlani}>
+                                                    <DurumChip durum={row.durum} />
+                                                    <Typography sx={stil.zamanMetin}>
+                                                        {hesap.minutesAgoText(row.updatedAt)}
+                                                    </Typography>
+                                                    <IconButton size="small" sx={{ color: "#3b82f6" }}>
+                                                        <OpenInNew fontSize="inherit" />
+                                                    </IconButton>
+                                                </Box>
                                             </Box>
-                                            <Typography sx={stil.zamanMetin}>{hesap.minutesAgoText(row.updatedAt)}</Typography>
-                                            <IconButton size="small" sx={{ color: "#3b82f6" }}>
-                                                <OpenInNew fontSize="inherit" />
-                                            </IconButton>
                                         </motion.div>
                                     ))
                                 )}
@@ -303,19 +510,19 @@ export default function Anasayfa({ kullanici }) {
                         </PanelKarti>
                     </Grid>
 
-                    <Grid item xs={12} lg={5}>
-                        <PanelKarti baslik="Operasyon Skoru" alt="Basit performans özeti">
+                    <Grid item xs={12} xl={4}>
+                        <PanelKarti baslik="Operasyon Skoru" alt="Günlük performans özeti" minHeight={430}>
                             <Box sx={stil.performansKonteyner}>
                                 <Box sx={stil.skorDaire}>
                                     <Typography variant="h2" sx={{ fontWeight: 900, color: "#10b981" }}>
                                         {Number.isFinite(hesap.skor) ? hesap.skor : 0}
                                     </Typography>
-                                    <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+                                    <Typography variant="caption" sx={{ color: "#94a3b8", letterSpacing: 1 }}>
                                         PUAN
                                     </Typography>
                                 </Box>
 
-                                <Box sx={{ width: "100%", mt: 3 }}>
+                                <Box sx={{ width: "100%", mt: 4 }}>
                                     <Typography sx={stil.progressLabel}>
                                         Atama Sağlığı <span>%{hesap.pctAssignment}</span>
                                     </Typography>
@@ -329,7 +536,7 @@ export default function Anasayfa({ kullanici }) {
                                         />
                                     </Box>
 
-                                    <Typography sx={{ ...stil.progressLabel, mt: 2 }}>
+                                    <Typography sx={{ ...stil.progressLabel, mt: 2.5 }}>
                                         Teslim Oranı <span>%{hesap.pctDelivery}</span>
                                     </Typography>
                                     <Box sx={stil.progressLine}>
@@ -341,7 +548,113 @@ export default function Anasayfa({ kullanici }) {
                                             }}
                                         />
                                     </Box>
+
+                                    <Typography sx={{ ...stil.progressLabel, mt: 2.5 }}>
+                                        Veri Kalitesi <span>%{hesap.veriKaliteOrani}</span>
+                                    </Typography>
+                                    <Box sx={stil.progressLine}>
+                                        <Box
+                                            sx={{
+                                                ...stil.progressFill,
+                                                width: `${hesap.veriKaliteOrani}%`,
+                                                bgcolor: "#14b8a6",
+                                            }}
+                                        />
+                                    </Box>
                                 </Box>
+                            </Box>
+                        </PanelKarti>
+                    </Grid>
+                </Grid>
+
+                <Grid container spacing={2.5}>
+                    <Grid item xs={12} md={6} xl={4}>
+                        <PanelKarti baslik="İşlem Geçmişi" alt="Son kim hangi kayıt üzerinde işlem yaptı" minHeight={340}>
+                            <Box sx={stil.listeKonteyner}>
+                                {hesap.recentActions.length === 0 ? (
+                                    <Typography sx={{ color: "#64748b" }}>İşlem geçmişi bulunamadı.</Typography>
+                                ) : (
+                                    hesap.recentActions.map((item) => (
+                                        <motion.div key={item.id} whileHover={{ x: 4 }} style={stil.listeElemanMotion}>
+                                            <Box sx={stil.historyItem}>
+                                                <Box
+                                                    sx={{
+                                                        ...stil.ikonMini,
+                                                        bgcolor: "rgba(59,130,246,0.12)",
+                                                        color: "#3b82f6",
+                                                    }}
+                                                >
+                                                    <Autorenew fontSize="inherit" />
+                                                </Box>
+
+                                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                    <Typography sx={stil.listeMetin}>
+                                                        {item.userName} • {item.actionType}
+                                                    </Typography>
+                                                    <Typography sx={stil.listeAltMetin}>
+                                                        Sefer #{item.sefer} • {item.route}
+                                                    </Typography>
+
+                                                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.2 }}>
+                                                        <DurumChip durum={item.durum} />
+                                                        <Typography sx={stil.zamanMetin}>
+                                                            {hesap.minutesAgoText(item.updatedAt)}
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+                                            </Box>
+                                        </motion.div>
+                                    ))
+                                )}
+                            </Box>
+                        </PanelKarti>
+                    </Grid>
+
+                    <Grid item xs={12} md={6} xl={4}>
+                        <PanelKarti baslik="Kullanıcı Aktivitesi" alt="En çok işlem yapan kullanıcılar" minHeight={340}>
+                            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.4 }}>
+                                {hesap.topUsers.length === 0 ? (
+                                    <Typography sx={{ color: "#64748b" }}>
+                                        Kullanıcı aktivitesi bulunamadı.
+                                    </Typography>
+                                ) : (
+                                    hesap.topUsers.map((user, i) => (
+                                        <Box key={user.key} sx={stil.userRow}>
+                                            <Box sx={stil.userBadge}>{getInitials(user.name)}</Box>
+
+                                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                <Typography sx={stil.listeMetin}>{user.name}</Typography>
+                                                <Typography sx={stil.listeAltMetin}>
+                                                    Toplam: {user.total} • Teslim: {user.teslim} • Atama: {user.atama} • Kritik: {user.kritik}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box sx={{ textAlign: "right" }}>
+                                                <Typography sx={stil.userValue}>{user.total}</Typography>
+                                                <Typography sx={stil.userRank}>#{i + 1}</Typography>
+                                            </Box>
+                                        </Box>
+                                    ))
+                                )}
+                            </Box>
+                        </PanelKarti>
+                    </Grid>
+
+                    <Grid item xs={12} xl={4}>
+                        <PanelKarti baslik="Kritik Uyarılar" alt="Hızlı müdahale gerektiren kayıtlar" minHeight={340}>
+                            <Box sx={stil.uyariWrap}>
+                                {hesap.kritikBekleyenler.length === 0 ? (
+                                    <Typography sx={{ color: "#64748b" }}>
+                                        Kritik uyarı bulunmuyor.
+                                    </Typography>
+                                ) : (
+                                    hesap.kritikBekleyenler.map((item) => (
+                                        <Box key={item.id} sx={stil.uyariPill}>
+                                            <WarningAmber sx={{ fontSize: 18, color: "#f59e0b" }} />
+                                            <Typography sx={stil.uyariText}>{item.text}</Typography>
+                                        </Box>
+                                    ))
+                                )}
                             </Box>
                         </PanelKarti>
                     </Grid>
@@ -351,77 +664,473 @@ export default function Anasayfa({ kullanici }) {
     );
 }
 
-// --- ALT BİLEŞENLER ---
-
 const ModernKart = ({ ikon, baslik, deger, alt, renk, delay, alert }) => (
     <motion.div
-        initial={{ opacity: 0, y: 30 }}
+        initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay, type: "spring", stiffness: 100 }}
-        whileHover={{ scale: 1.02, translateY: -5 }}
+        transition={{ delay, type: "spring", stiffness: 110 }}
+        whileHover={{ scale: 1.015, y: -3 }}
+        style={{ height: "100%" }}
     >
-        <Paper sx={{ ...stil.modernKart, borderTop: `4px solid ${renk}` }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Paper sx={{ ...stil.modernKart, borderTop: `3px solid ${renk}` }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 2 }}>
                 <Box>
                     <Typography sx={stil.kartEtiket}>{baslik}</Typography>
                     <Typography sx={stil.kartDeger}>{deger}</Typography>
                 </Box>
-                <Box sx={{ ...stil.ikonDaire, bgcolor: `${renk}20`, color: renk }}>{ikon}</Box>
+                <Box sx={{ ...stil.ikonDaire, bgcolor: `${renk}18`, color: renk }}>{ikon}</Box>
             </Box>
-            <Box sx={{ mt: 2, display: "flex", alignItems: "center", gap: 1 }}>
-                <TrendingUp sx={{ fontSize: 16, color: alert ? "#ef4444" : "#10b981" }} />
-                <Typography sx={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: 500 }}>{alt}</Typography>
+
+            <Box sx={{ mt: 2.2, display: "flex", alignItems: "center", gap: 1 }}>
+                <TrendingUp sx={{ fontSize: 15, color: alert ? "#ef4444" : "#10b981" }} />
+                <Typography sx={{ fontSize: "0.76rem", color: "#94a3b8", fontWeight: 500 }}>
+                    {alt}
+                </Typography>
             </Box>
         </Paper>
     </motion.div>
 );
 
-const PanelKarti = ({ children, baslik, alt }) => (
-    <Paper sx={stil.anaPanel}>
-        <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+const PanelKarti = ({ children, baslik, alt, sagAlan, minHeight = 320 }) => (
+    <Paper sx={{ ...stil.anaPanel, minHeight }}>
+        <Box
+            sx={{
+                mb: 2.5,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 2,
+                flexWrap: "wrap",
+            }}
+        >
             <Box>
                 <Typography sx={stil.panelBaslik}>{baslik}</Typography>
-                <Typography sx={{ color: "#64748b", fontSize: "0.8rem" }}>{alt}</Typography>
+                <Typography sx={{ color: "#64748b", fontSize: "0.82rem", mt: 0.6 }}>{alt}</Typography>
             </Box>
-            <IconButton size="small" sx={{ color: "#3b82f6" }}>
-                <ArrowForwardIos fontSize="inherit" />
-            </IconButton>
+
+            <Box
+                sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                }}
+            >
+                {sagAlan}
+                <IconButton size="small" sx={{ color: "#3b82f6" }}>
+                    <ArrowForwardIos fontSize="inherit" />
+                </IconButton>
+            </Box>
         </Box>
-        <Divider sx={{ borderColor: "rgba(255,255,255,0.05)", mb: 3 }} />
+
+        <Divider sx={{ borderColor: "rgba(255,255,255,0.05)", mb: 2.5 }} />
         {children}
     </Paper>
 );
 
-// --- STİLLER ---
+const MiniFilter = ({ label, aktif, onClick }) => (
+    <Chip
+        label={label}
+        onClick={onClick}
+        size="small"
+        sx={{
+            color: aktif ? "#fff" : "#94a3b8",
+            bgcolor: aktif ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.03)",
+            border: aktif ? "1px solid rgba(59,130,246,0.35)" : "1px solid rgba(255,255,255,0.05)",
+            fontWeight: 700,
+            borderRadius: "999px",
+            height: 28,
+            "&:hover": {
+                bgcolor: aktif ? "rgba(59,130,246,0.24)" : "rgba(255,255,255,0.06)",
+            },
+        }}
+    />
+);
+
+const DurumChip = ({ durum }) => {
+    const map = {
+        teslim: { label: "Teslim", color: "#10b981", bg: "rgba(16,185,129,0.12)" },
+        bekliyor: { label: "Bekliyor", color: "#f59e0b", bg: "rgba(245,158,11,0.14)" },
+        kritik: { label: "Kritik", color: "#ef4444", bg: "rgba(239,68,68,0.14)" },
+        atandi: { label: "Atandı", color: "#3b82f6", bg: "rgba(59,130,246,0.14)" },
+        guncel: { label: "Güncel", color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
+    };
+
+    const cfg = map[durum] || map.guncel;
+
+    return (
+        <Box
+            sx={{
+                px: 1.15,
+                py: 0.5,
+                borderRadius: "999px",
+                fontSize: "0.72rem",
+                fontWeight: 800,
+                color: cfg.color,
+                bgcolor: cfg.bg,
+                border: `1px solid ${cfg.bg}`,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+            }}
+        >
+            {cfg.label}
+        </Box>
+    );
+};
+
+function getInitials(name) {
+    const text = (name || "").trim();
+    if (!text) return <PersonOutline fontSize="inherit" />;
+
+    const parts = text.split(" ").filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
 
 const stil = {
-    anaKonteyner: { minHeight: "100vh", bgcolor: "#020617", pt: 4, pb: 8, position: "relative", overflow: "hidden" },
-    arkaPlanEfektleri: { position: "absolute", inset: 0, zIndex: 0, filter: "blur(120px)" },
-    parlama1: { position: "absolute", top: "-5%", right: "5%", width: "35vw", height: "35vw", borderRadius: "50%", background: "rgba(59, 130, 246, 0.12)" },
-    parlama2: { position: "absolute", bottom: "5%", left: "5%", width: "25vw", height: "25vw", borderRadius: "50%", background: "rgba(139, 92, 246, 0.08)" },
-    ustBar: { mb: 6, display: "flex", justifyContent: "space-between", alignItems: "center" },
-    baslik: { color: "#fff", fontWeight: 900, letterSpacing: "-1.5px" },
-    altBaslik: { color: "#64748b", fontSize: "1rem", mt: 0.5 },
-    ustButon: { bgcolor: "rgba(255,255,255,0.03)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.05)", "&:hover": { bgcolor: "rgba(59, 130, 246, 0.1)", color: "#3b82f6" } },
+    anaKonteyner: {
+        minHeight: "100vh",
+        bgcolor: "#020617",
+        pt: { xs: 3, md: 4 },
+        pb: 8,
+        position: "relative",
+        overflow: "hidden",
+    },
+    arkaPlanEfektleri: {
+        position: "absolute",
+        inset: 0,
+        zIndex: 0,
+        filter: "blur(120px)",
+        pointerEvents: "none",
+    },
+    parlama1: {
+        position: "absolute",
+        top: "-8%",
+        right: "2%",
+        width: "32vw",
+        height: "32vw",
+        borderRadius: "50%",
+        background: "rgba(59, 130, 246, 0.12)",
+    },
+    parlama2: {
+        position: "absolute",
+        bottom: "0%",
+        left: "0%",
+        width: "24vw",
+        height: "24vw",
+        borderRadius: "50%",
+        background: "rgba(139, 92, 246, 0.08)",
+    },
 
-    modernKart: { p: 3, borderRadius: "24px", bgcolor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.05)", boxShadow: "0 20px 40px rgba(0,0,0,0.3)" },
-    kartEtiket: { color: "#94a3b8", fontSize: "0.7rem", fontWeight: 800, letterSpacing: "1px" },
-    kartDeger: { color: "#fff", fontSize: "2.2rem", fontWeight: 900, lineHeight: 1.2, mt: 0.5 },
-    ikonDaire: { width: 48, height: 48, borderRadius: "14px", display: "flex", alignItems: "center", justifyContent: "center" },
+    ustBar: {
+        mb: 4,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 2,
+        flexWrap: "wrap",
+    },
+    baslik: {
+        color: "#fff",
+        fontWeight: 900,
+        letterSpacing: "-1.8px",
+        textShadow: "0 10px 35px rgba(59,130,246,0.16)",
+        fontSize: { xs: "2.1rem", md: "2.7rem" },
+    },
+    altBaslik: {
+        color: "#64748b",
+        fontSize: "0.98rem",
+        mt: 0.6,
+    },
+    ustButon: {
+        width: 44,
+        height: 44,
+        bgcolor: "rgba(255,255,255,0.03)",
+        color: "#94a3b8",
+        border: "1px solid rgba(255,255,255,0.06)",
+        backdropFilter: "blur(12px)",
+        "&:hover": {
+            bgcolor: "rgba(59, 130, 246, 0.1)",
+            color: "#3b82f6",
+        },
+    },
 
-    anaPanel: { p: 4, borderRadius: "32px", bgcolor: "rgba(15, 23, 42, 0.4)", backdropFilter: "blur(30px)", border: "1px solid rgba(255,255,255,0.03)", minHeight: "400px" },
-    panelBaslik: { color: "#fff", fontWeight: 800, fontSize: "1.3rem" },
-    listeKonteyner: { display: "flex", flexDirection: "column", gap: 1.5 },
-    listeEleman: { p: 2, borderRadius: "18px", bgcolor: "rgba(255,255,255,0.02)", display: "flex", alignItems: "center", gap: 2, border: "1px solid rgba(255,255,255,0.03)" },
-    durumNokta: { width: 10, height: 10, borderRadius: "50%", boxShadow: "0 0 10px currentColor" },
-    listeMetin: { color: "#e2e8f0", fontWeight: 600, fontSize: "0.95rem" },
-    listeAltMetin: { color: "#64748b", fontSize: "0.8rem" },
-    zamanMetin: { color: "#475569", fontSize: "0.75rem", fontWeight: 600 },
+    loadingWrap: {
+        display: "flex",
+        alignItems: "center",
+        gap: 2,
+        mb: 4,
+        px: 2,
+        py: 1.5,
+        borderRadius: 3,
+        bgcolor: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        width: "fit-content",
+    },
 
-    performansKonteyner: { display: "flex", flexDirection: "column", alignItems: "center", pt: 2 },
-    skorDaire: { width: 140, height: 140, borderRadius: "50%", border: "8px solid rgba(16, 185, 129, 0.1)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxShadow: "inset 0 0 20px rgba(16, 185, 129, 0.1)" },
+    modernKart: {
+        p: 2.6,
+        borderRadius: "22px",
+        bgcolor: "rgba(8, 15, 33, 0.86)",
+        backdropFilter: "blur(18px)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        boxShadow: "0 12px 32px rgba(0,0,0,0.28)",
+        height: "100%",
+        minHeight: 138,
+        position: "relative",
+        overflow: "hidden",
+        "&::after": {
+            content: '""',
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(180deg, rgba(255,255,255,0.025), transparent 42%)",
+            pointerEvents: "none",
+        },
+    },
+    kartEtiket: {
+        color: "#8da2c0",
+        fontSize: "0.68rem",
+        fontWeight: 800,
+        letterSpacing: "1.2px",
+    },
+    kartDeger: {
+        color: "#fff",
+        fontSize: "2.15rem",
+        fontWeight: 900,
+        lineHeight: 1.15,
+        mt: 0.6,
+    },
+    ikonDaire: {
+        width: 46,
+        height: 46,
+        borderRadius: "14px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid rgba(255,255,255,0.05)",
+        flexShrink: 0,
+    },
 
-    progressLabel: { color: "#fff", fontSize: "0.9rem", mb: 1, display: "flex", justifyContent: "space-between" },
-    progressLine: { width: "100%", height: 6, bgcolor: "rgba(255,255,255,0.05)", borderRadius: 10, overflow: "hidden" },
-    progressFill: { height: "100%", borderRadius: 10 },
+    anaPanel: {
+        p: 3,
+        borderRadius: "26px",
+        bgcolor: "rgba(8, 15, 33, 0.82)",
+        backdropFilter: "blur(22px)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        boxShadow: "0 16px 40px rgba(0,0,0,0.24)",
+        height: "100%",
+    },
+    panelBaslik: {
+        color: "#fff",
+        fontWeight: 800,
+        fontSize: "1.22rem",
+    },
+
+    filtreAlan: {
+        display: "flex",
+        gap: 0.8,
+        flexWrap: "wrap",
+        justifyContent: "flex-end",
+    },
+
+    listeKonteyner: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 1.2,
+    },
+    listeElemanMotion: {
+        width: "100%",
+    },
+    feedItem: {
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 1.5,
+        p: 1.4,
+        borderRadius: "18px",
+        bgcolor: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        transition: "all .2s ease",
+        "&:hover": {
+            bgcolor: "rgba(255,255,255,0.03)",
+            borderColor: "rgba(59,130,246,0.18)",
+        },
+        flexWrap: "wrap",
+    },
+    historyItem: {
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 1.2,
+        p: 1.4,
+        borderRadius: "18px",
+        bgcolor: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        transition: "all .2s ease",
+        "&:hover": {
+            bgcolor: "rgba(255,255,255,0.03)",
+            borderColor: "rgba(59,130,246,0.18)",
+        },
+    },
+    sagBilgiAlani: {
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        ml: "auto",
+        flexWrap: "wrap",
+        justifyContent: "flex-end",
+    },
+    listeMetin: {
+        color: "#e2e8f0",
+        fontWeight: 700,
+        fontSize: "0.95rem",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+    },
+    listeAltMetin: {
+        color: "#72839d",
+        fontSize: "0.81rem",
+        mt: 0.45,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+    },
+    zamanMetin: {
+        color: "#64748b",
+        fontSize: "0.75rem",
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+    },
+
+    durumNokta: {
+        width: 10,
+        height: 10,
+        borderRadius: "50%",
+        boxShadow: "0 0 14px currentColor",
+        flexShrink: 0,
+        mt: 0.7,
+    },
+
+    performansKonteyner: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        pt: 1.5,
+        height: "100%",
+        justifyContent: "center",
+    },
+    skorDaire: {
+        width: 168,
+        height: 168,
+        borderRadius: "50%",
+        border: "10px solid rgba(16, 185, 129, 0.08)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow:
+            "inset 0 0 30px rgba(16, 185, 129, 0.08), 0 0 34px rgba(16,185,129,0.06)",
+    },
+
+    progressLabel: {
+        color: "#fff",
+        fontSize: "0.9rem",
+        mb: 0.8,
+        display: "flex",
+        justifyContent: "space-between",
+        fontWeight: 600,
+    },
+    progressLine: {
+        width: "100%",
+        height: 8,
+        bgcolor: "rgba(255,255,255,0.06)",
+        borderRadius: 999,
+        overflow: "hidden",
+    },
+    progressFill: {
+        height: "100%",
+        borderRadius: 999,
+        transition: "width .35s ease",
+    },
+
+    ikonMini: {
+        width: 34,
+        height: 34,
+        borderRadius: "12px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 16,
+        border: "1px solid rgba(255,255,255,0.04)",
+        flexShrink: 0,
+    },
+
+    userRow: {
+        display: "flex",
+        alignItems: "center",
+        gap: 1.4,
+        p: 1.4,
+        borderRadius: "16px",
+        bgcolor: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.04)",
+        transition: "all .2s ease",
+        "&:hover": {
+            transform: "translateY(-1px)",
+            bgcolor: "rgba(255,255,255,0.03)",
+            borderColor: "rgba(139,92,246,0.18)",
+        },
+    },
+    userBadge: {
+        minWidth: 40,
+        width: 40,
+        height: 40,
+        borderRadius: "13px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "rgba(139,92,246,0.18)",
+        color: "#b197fc",
+        fontWeight: 800,
+        fontSize: "0.8rem",
+        flexShrink: 0,
+        border: "1px solid rgba(167,139,250,0.16)",
+    },
+    userValue: {
+        color: "#fff",
+        fontWeight: 900,
+        fontSize: "1rem",
+        lineHeight: 1.1,
+    },
+    userRank: {
+        color: "#64748b",
+        fontSize: "0.75rem",
+        fontWeight: 700,
+        mt: 0.25,
+    },
+
+    uyariWrap: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 1.2,
+    },
+    uyariPill: {
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        px: 1.4,
+        py: 1.15,
+        borderRadius: "16px",
+        bgcolor: "rgba(245,158,11,0.08)",
+        border: "1px solid rgba(245,158,11,0.16)",
+        maxWidth: "100%",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+    },
+    uyariText: {
+        color: "#f8fafc",
+        fontSize: "0.82rem",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+    },
 };

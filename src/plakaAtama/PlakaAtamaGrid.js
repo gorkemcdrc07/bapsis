@@ -31,7 +31,13 @@ const HEADER_H = 54;
 const MIN_COL_W = 90;
 const MAX_COL_W = 700;
 
-const LISTBOX_FIELDS = new Set(["cekici", "surucu", "vkn"]);
+const LISTBOX_FIELDS = new Set([
+    "cekici",
+    "surucu",
+    "vkn",
+    "arac_durumu",
+    "peron_no",
+]);
 
 const onlyDigits = (value) => String(value ?? "").replace(/\D+/g, "");
 
