@@ -1,5 +1,13 @@
 // src/plakaAtama/PlakaAtamaGrid.js
-import React, { memo, useLayoutEffect, useMemo, useRef, useState, useCallback, useEffect } from "react";
+import React, {
+    memo,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    useCallback,
+    useEffect,
+} from "react";
 import {
     Box,
     Card,
@@ -192,7 +200,10 @@ const EditableInputCell = memo(
             />
         );
     },
-    (prev, next) => prev.value === next.value && prev.onChange === next.onChange && prev.sx === next.sx
+    (prev, next) =>
+        prev.value === next.value &&
+        prev.onChange === next.onChange &&
+        prev.sx === next.sx
 );
 
 const Row = memo(
@@ -357,7 +368,7 @@ const Row = memo(
     areEqual
 );
 
-export default function PlakaAtamaGrid({
+function PlakaAtamaGrid({
     rows,
     columns,
     s,
@@ -385,10 +396,30 @@ export default function PlakaAtamaGrid({
     }, [columns, visibleColumnKeys]);
 
     const [columnWidths, setColumnWidths] = useState({});
-    const [copyToast, setCopyToast] = useState({
+    const columnWidthsRef = useRef({});
+
+    const [, forceToastRender] = useState(0);
+    const copyToastRef = useRef({
         open: false,
         text: "",
     });
+
+    const showCopyToast = useCallback((text) => {
+        copyToastRef.current = {
+            open: true,
+            text,
+        };
+        forceToastRender((v) => v + 1);
+    }, []);
+
+    const closeCopyToast = useCallback(() => {
+        if (!copyToastRef.current.open) return;
+        copyToastRef.current = {
+            open: false,
+            text: "",
+        };
+        forceToastRender((v) => v + 1);
+    }, []);
 
     useEffect(() => {
         setColumnWidths((prev) => {
@@ -401,9 +432,14 @@ export default function PlakaAtamaGrid({
                 }
             }
 
+            columnWidthsRef.current = next;
             return next;
         });
     }, [effectiveColumnsBase]);
+
+    useEffect(() => {
+        columnWidthsRef.current = columnWidths;
+    }, [columnWidths]);
 
     const effectiveColumns = useMemo(() => {
         return effectiveColumnsBase.map((col) => ({
@@ -471,10 +507,7 @@ export default function PlakaAtamaGrid({
 
         try {
             await navigator.clipboard.writeText(digits);
-            setCopyToast({
-                open: true,
-                text: `VKN kopyalandı: ${digits}`,
-            });
+            showCopyToast(`VKN kopyalandı: ${digits}`);
             return true;
         } catch (err) {
             const ta = document.createElement("textarea");
@@ -488,19 +521,14 @@ export default function PlakaAtamaGrid({
             try {
                 document.execCommand("copy");
                 document.body.removeChild(ta);
-
-                setCopyToast({
-                    open: true,
-                    text: `VKN kopyalandı: ${digits}`,
-                });
-
+                showCopyToast(`VKN kopyalandı: ${digits}`);
                 return true;
             } catch (_) {
                 document.body.removeChild(ta);
                 return false;
             }
         }
-    }, []);
+    }, [showCopyToast]);
 
     const itemData = useMemo(
         () => ({
@@ -544,50 +572,60 @@ export default function PlakaAtamaGrid({
 
     const resizeStateRef = useRef(null);
 
-    const startResize = useCallback(
-        (e, colKey) => {
-            e.preventDefault();
-            e.stopPropagation();
+    const startResize = useCallback((e, colKey) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-            const key = String(colKey).trim();
-            const startX = e.clientX;
-            const startWidth = columnWidths[key] ?? 120;
+        const key = String(colKey).trim();
+        const startX = e.clientX;
+        const startWidth = columnWidthsRef.current[key] ?? 120;
 
-            resizeStateRef.current = { key, startX, startWidth };
+        resizeStateRef.current = { key, startX, startWidth };
 
-            const onMouseMove = (ev) => {
-                const state = resizeStateRef.current;
-                if (!state) return;
+        const onMouseMove = (ev) => {
+            const state = resizeStateRef.current;
+            if (!state) return;
 
-                const delta = ev.clientX - state.startX;
-                const nextWidth = Math.max(MIN_COL_W, Math.min(MAX_COL_W, state.startWidth + delta));
+            const delta = ev.clientX - state.startX;
+            const nextWidth = Math.max(
+                MIN_COL_W,
+                Math.min(MAX_COL_W, state.startWidth + delta)
+            );
 
-                setColumnWidths((prev) => ({
+            setColumnWidths((prev) => {
+                if (prev[state.key] === nextWidth) return prev;
+
+                const next = {
                     ...prev,
                     [state.key]: nextWidth,
-                }));
-            };
+                };
+                columnWidthsRef.current = next;
+                return next;
+            });
+        };
 
-            const onMouseUp = () => {
-                resizeStateRef.current = null;
-                window.removeEventListener("mousemove", onMouseMove);
-                window.removeEventListener("mouseup", onMouseUp);
-            };
+        const onMouseUp = () => {
+            resizeStateRef.current = null;
+            window.removeEventListener("mousemove", onMouseMove);
+            window.removeEventListener("mouseup", onMouseUp);
+        };
 
-            window.addEventListener("mousemove", onMouseMove);
-            window.addEventListener("mouseup", onMouseUp);
-        },
-        [columnWidths]
-    );
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+    }, []);
 
     const listHeight = Math.max(200, vh - HEADER_H);
+
+    const copyToast = copyToastRef.current;
 
     return (
         <Box sx={s.gridContainer}>
             <Box ref={wrapRef} sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                 {!loading && rows.length === 0 ? (
                     <Box sx={{ p: 3 }}>
-                        <Typography sx={{ color: "rgba(255,255,255,0.6)" }}>Gösterilecek kayıt bulunamadı.</Typography>
+                        <Typography sx={{ color: "rgba(255,255,255,0.6)" }}>
+                            Gösterilecek kayıt bulunamadı.
+                        </Typography>
                     </Box>
                 ) : (
                     <Box sx={{ flex: 1, minHeight: 0, overflowX: "auto", overflowY: "hidden" }}>
@@ -688,7 +726,7 @@ export default function PlakaAtamaGrid({
                                     width={totalWidth}
                                     itemCount={rows.length}
                                     itemSize={ROW_H}
-                                    overscanCount={8}
+                                    overscanCount={6}
                                     itemData={itemData}
                                     itemKey={itemKey}
                                 >
@@ -703,13 +741,13 @@ export default function PlakaAtamaGrid({
             <Snackbar
                 open={copyToast.open}
                 autoHideDuration={2200}
-                onClose={() => setCopyToast({ open: false, text: "" })}
+                onClose={closeCopyToast}
                 anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             >
                 <Alert
                     severity="success"
                     variant="filled"
-                    onClose={() => setCopyToast({ open: false, text: "" })}
+                    onClose={closeCopyToast}
                     sx={{
                         fontWeight: 700,
                         borderRadius: 2.5,
@@ -724,3 +762,5 @@ export default function PlakaAtamaGrid({
         </Box>
     );
 }
+
+export default memo(PlakaAtamaGrid);

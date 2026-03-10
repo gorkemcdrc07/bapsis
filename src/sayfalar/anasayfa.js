@@ -30,8 +30,9 @@ import {
 import { motion } from "framer-motion";
 import { supabase } from "../supabase";
 
-export default function Anasayfa({ kullanici }) {
-    const isim = kullanici?.kullanici?.toUpperCase() || "KULLANICI";
+export default function Anasayfa() {
+    const [aktifKullanici, setAktifKullanici] = useState("");
+    const [gorunenAd, setGorunenAd] = useState("");
 
     const [loading, setLoading] = useState(true);
     const [hata, setHata] = useState("");
@@ -40,6 +41,26 @@ export default function Anasayfa({ kullanici }) {
     const [atamalarRows, setAtamalarRows] = useState([]);
     const [tamamlananRows, setTamamlananRows] = useState([]);
     const [akışFiltre, setAkışFiltre] = useState("tum");
+
+    useEffect(() => {
+        try {
+            const rawUser = localStorage.getItem("bapsis_user");
+
+            if (!rawUser) return;
+
+            const parsed = JSON.parse(rawUser);
+
+            const username = (parsed?.username || "").trim();
+            const displayName = (parsed?.displayName || "").trim();
+
+            setAktifKullanici(username);
+            setGorunenAd(displayName || username);
+        } catch (err) {
+            console.error("localStorage kullanıcı okunamadı:", err);
+        }
+    }, []);
+
+    const isim = (gorunenAd || aktifKullanici || "KULLANICI").toUpperCase();
 
     useEffect(() => {
         let alive = true;
@@ -116,7 +137,9 @@ export default function Anasayfa({ kullanici }) {
             return isSameDay(dt, now);
         }).length;
 
-        const uniqueCekici = new Set(atamalarRows.map((r) => normalize(r.cekici)).filter(Boolean));
+        const uniqueCekici = new Set(
+            atamalarRows.map((r) => normalize(r.cekici)).filter(Boolean)
+        );
         let aktifFilo = uniqueCekici.size;
 
         if (aktifFilo === 0) {
@@ -124,7 +147,9 @@ export default function Anasayfa({ kullanici }) {
                 const st = normalize(p.statu).toLowerCase();
                 return st === "aktif" || st === "active" || st === "on" || st === "1";
             });
-            const setA = new Set(activePlates.map((p) => normalize(p.cekici)).filter(Boolean));
+            const setA = new Set(
+                activePlates.map((p) => normalize(p.cekici)).filter(Boolean)
+            );
             aktifFilo = setA.size;
         }
 
@@ -189,7 +214,7 @@ export default function Anasayfa({ kullanici }) {
         });
 
         const recentActions = atamalarRows.slice(0, 10).map((r) => {
-            const userName = normalize(r.updated_by_name) || "Bilinmeyen kullanıcı";
+            const userName = normalize(aktifKullanici) || "Bilinmeyen kullanıcı";
             const sefer = normalize(r.seferno) || normalize(r.line_no) || normalize(r.id) || "—";
             const state = classifyRow(r);
 
@@ -209,34 +234,19 @@ export default function Anasayfa({ kullanici }) {
             };
         });
 
+        const currentUserName = normalize(gorunenAd) || normalize(aktifKullanici) || "Bilinmeyen kullanıcı";
+
         const userMap = new Map();
-        atamalarRows.forEach((r) => {
-            const key = normalize(r.updated_by_name) || `bilinmeyen-${r.id}`;
-            const name = normalize(r.updated_by_name) || "Bilinmeyen kullanıcı";
-            const state = classifyRow(r);
-
-            if (!userMap.has(key)) {
-                userMap.set(key, {
-                    key,
-                    name,
-                    total: 0,
-                    teslim: 0,
-                    atama: 0,
-                    kritik: 0,
-                });
-            }
-
-            const item = userMap.get(key);
-            item.total += 1;
-
-            if (state.teslimVar) item.teslim += 1;
-            if (normalize(r.cekici) || normalize(r.dorse)) item.atama += 1;
-            if (state.kritik) item.kritik += 1;
+        userMap.set(currentUserName, {
+            key: currentUserName,
+            name: currentUserName,
+            total: atamalarRows.length,
+            teslim: atamalarRows.filter((r) => classifyRow(r).teslimVar).length,
+            atama: atamalarRows.filter((r) => normalize(r.cekici) || normalize(r.dorse)).length,
+            kritik: atamalarRows.filter((r) => classifyRow(r).kritik).length,
         });
 
-        const topUsers = Array.from(userMap.values())
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 6);
+        const topUsers = Array.from(userMap.values()).slice(0, 6);
 
         const kritikKayitlar = atamalarRows.filter((r) => classifyRow(r).kritik).length;
 
@@ -297,7 +307,7 @@ export default function Anasayfa({ kullanici }) {
             pctAssignment,
             pctDelivery,
         };
-    }, [plakalarRows, atamalarRows, tamamlananRows]);
+    }, [plakalarRows, atamalarRows, tamamlananRows, aktifKullanici, gorunenAd]);
 
     const liveFeed = useMemo(() => {
         if (akışFiltre === "tum") return hesap.liveFeedRaw;
@@ -569,7 +579,11 @@ export default function Anasayfa({ kullanici }) {
 
                 <Grid container spacing={2.5}>
                     <Grid item xs={12} md={6} xl={4}>
-                        <PanelKarti baslik="İşlem Geçmişi" alt="Son kim hangi kayıt üzerinde işlem yaptı" minHeight={340}>
+                        <PanelKarti
+                            baslik="İşlem Geçmişi"
+                            alt={`Son kim hangi kayıt üzerinde işlem yaptı${aktifKullanici ? ` • Aktif kullanıcı: ${aktifKullanici}` : ""}`}
+                            minHeight={340}
+                        >
                             <Box sx={stil.listeKonteyner}>
                                 {hesap.recentActions.length === 0 ? (
                                     <Typography sx={{ color: "#64748b" }}>İşlem geçmişi bulunamadı.</Typography>
@@ -611,7 +625,7 @@ export default function Anasayfa({ kullanici }) {
                     </Grid>
 
                     <Grid item xs={12} md={6} xl={4}>
-                        <PanelKarti baslik="Kullanıcı Aktivitesi" alt="En çok işlem yapan kullanıcılar" minHeight={340}>
+                        <PanelKarti baslik="Kullanıcı Aktivitesi" alt="Aktif oturum kullanıcısı baz alınmıştır" minHeight={340}>
                             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.4 }}>
                                 {hesap.topUsers.length === 0 ? (
                                     <Typography sx={{ color: "#64748b" }}>

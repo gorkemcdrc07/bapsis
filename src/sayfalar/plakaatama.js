@@ -500,12 +500,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
     const normalizeSearchText = useCallback((v) => {
         return String(v ?? "")
-            .toLowerCase()
+            .toLocaleLowerCase("tr-TR")
             .replace(/\s+/g, "")
             .replace(/[-._]/g, "")
             .trim();
     }, []);
-
 
     const FILO_VKN_SET = useMemo(
         () =>
@@ -628,29 +627,40 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     const fetchPlakalar = useCallback(async () => {
         setPlakaLoading(true);
         try {
-            const pageSize = 2000;
+            const pageSize = 500;
             let from = 0;
             let all = [];
 
             while (true) {
+                const to = from + pageSize - 1;
+
                 const { data, error } = await supabase
                     .from("plakalar")
                     .select("id, cekici, dorse, tc_no, ad_soyad, telefon, vkn, tip")
-                    .order("ad_soyad", { ascending: true })
-                    .range(from, from + pageSize - 1);
+                    .order("id", { ascending: true })
+                    .range(from, to);
 
                 if (error) {
                     console.error("fetchPlakalar error:", error);
-                    setSnack({ open: true, msg: error.message || "Plakalar yüklenemedi", sev: "error" });
+                    setSnack({
+                        open: true,
+                        msg: error.message || "Plakalar yüklenemedi",
+                        sev: "error",
+                    });
                     all = [];
                     break;
                 }
 
-                all = all.concat(data || []);
-                if (!data || data.length < pageSize) break;
+                const rows = data || [];
+                all = all.concat(rows);
+
+                if (rows.length === 0) break;
+                if (rows.length < pageSize) break;
+
                 from += pageSize;
             }
 
+            console.log("plakalar toplam çekilen:", all.length);
             setPlakalar(all);
         } catch (e) {
             console.error("fetchPlakalar exception:", e);
@@ -660,7 +670,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             setPlakaLoading(false);
         }
     }, []);
-
     const ensurePlakalarLoaded = useCallback(async () => {
         if (plakaLoading) return;
         if (Array.isArray(plakalar) && plakalar.length > 0) return;
@@ -860,10 +869,17 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 baseNavlun = rotaNav;
             } else {
                 const currentNav = toNumber(row.navlun);
-                baseNavlun = currentNav != null ? currentNav : "";
-            }
+                let fallbackNavlun = currentNav != null ? currentNav : 0;
 
-            let ugramaBedeliRaw = null;
+                // navlun_sartlari'nda bulunamadıysa ekleme yap
+                if (hasVaris1 && hasVaris2 && hasVaris3) {
+                    fallbackNavlun += 900 * 2;
+                } else if (hasVaris1 && hasVaris2) {
+                    fallbackNavlun += 900;
+                }
+
+                baseNavlun = fallbackNavlun;
+            }            let ugramaBedeliRaw = null;
             let ugramaBedeli = null;
             let navlunAfterUgrama = toNumber(baseNavlun);
 
@@ -1215,6 +1231,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
     const SEARCH_KEYS = [
         "sefer",
+        "sevk",
         "cekici",
         "dorse",
         "surucu",
@@ -1229,18 +1246,21 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         "irsaliye",
         "datalogerno",
         "navlun",
-    ];
-    const filteredRows = useMemo(() => {
-        const query = String(qDeb || "").trim().toLowerCase();
+        "teslimat",
+        "guncellendi"
+    ];    const filteredRows = useMemo(() => {
+        const query = normalizeSearchText(qDeb);
 
         return rows.filter((r) => {
             if (filterMissingPlate && String(r.tc || "").trim() !== "") return false;
             if (!query) return true;
 
-            return SEARCH_KEYS.some((key) => String(r[key] ?? "").toLowerCase().includes(query));
+            return SEARCH_KEYS.some((key) => {
+                const val = normalizeSearchText(r[key]);
+                return val.includes(query);
+            });
         });
-    }, [rows, qDeb, filterMissingPlate]);
-
+    }, [rows, qDeb, filterMissingPlate, normalizeSearchText]);
     // =========================
     // ✅ SEÇİM (CHECKBOX)
     // =========================
@@ -1309,7 +1329,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     };
 
     const openListbox = useCallback(
-        async (e, rowId, field) => {
+        (e, rowId, field) => {
             if (!can(BTN.ROW_OPEN_LISTBOX)) return;
 
             const forcedListboxFields = ["cekici", "surucu", "vkn", "arac_durumu", "peron_no"];
@@ -1320,14 +1340,22 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             }
 
             setLb({ open: true, anchorEl: e.currentTarget, rowId, field, query: "" });
-
-            // sadece plaka datası gereken alanlarda yükle
-            if (["cekici", "dorse", "tc", "surucu", "tel", "vkn"].includes(field)) {
-                await ensurePlakalarLoaded();
-            }
         },
-        [can, ensurePlakalarLoaded, colPerms]
+        [can, colPerms]
     );
+
+    useEffect(() => {
+        const needsRemoteList =
+            lb.open &&
+            ["cekici", "dorse", "tc", "surucu", "tel", "vkn"].includes(lb.field) &&
+            String(lb.query || "").trim().length >= 2 &&
+            !plakaLoading &&
+            (!Array.isArray(plakalar) || plakalar.length === 0);
+
+        if (needsRemoteList) {
+            fetchPlakalar();
+        }
+    }, [lb.open, lb.field, lb.query, plakaLoading, plakalar, fetchPlakalar]);
     const closeListbox = () => setLb({ open: false, anchorEl: null, rowId: null, field: null, query: "" });
 
     const closeTimeDialog = useCallback(() => {
@@ -1346,61 +1374,54 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         });
     }, []);
     const plakaIndex = useMemo(() => {
-        const idx = { cekici: [], dorse: [], tc_no: [], ad_soyad: [], telefon: [], vkn: [] };
+        const idx = {
+            cekici: [],
+            dorse: [],
+            tc_no: [],
+            ad_soyad: [],
+            telefon: [],
+            vkn: [],
+        };
+
         if (!Array.isArray(plakalar) || plakalar.length === 0) return idx;
 
-        const sets = {
-            cekici: new Set(),
-            dorse: new Set(),
-            tc_no: new Set(),
-            ad_soyad: new Set(),
-            telefon: new Set(),
-            vkn: new Set(),
-        };
+        const vknSet = new Set();
 
         for (const p of plakalar) {
             const c = String(p?.cekici ?? "").trim();
-            if (c) sets.cekici.add(c);
+            if (c) idx.cekici.push(c);
 
             const d = String(p?.dorse ?? "").trim();
-            if (d) sets.dorse.add(d);
+            if (d) idx.dorse.push(d);
 
             const tc = String(p?.tc_no ?? "").trim();
-            if (tc) sets.tc_no.add(tc);
+            if (tc) idx.tc_no.push(tc);
 
             const ad = String(p?.ad_soyad ?? "").trim();
-            if (ad) sets.ad_soyad.add(ad);
+            if (ad) idx.ad_soyad.push(ad);
 
             const tel = String(p?.telefon ?? "").trim();
-            if (tel) sets.telefon.add(tel);
+            if (tel) idx.telefon.push(tel);
 
             const vkn = String(p?.vkn ?? "").trim();
-            if (vkn) sets.vkn.add(vkn);
+            if (vkn && !vknSet.has(vkn)) {
+                vknSet.add(vkn);
+                idx.vkn.push(vkn);
+            }
         }
-
-        idx.cekici = Array.from(sets.cekici);
-        idx.dorse = Array.from(sets.dorse);
-        idx.tc_no = Array.from(sets.tc_no);
-        idx.ad_soyad = Array.from(sets.ad_soyad);
-        idx.telefon = Array.from(sets.telefon);
-        idx.vkn = Array.from(sets.vkn);
 
         return idx;
     }, [plakalar]);
-
     const debouncedLbQuery = useDebouncedValue(lb.query, 120);
 
     // ✅ İlk açılışta ekranda gösterilecek kayıt
-    const LISTBOX_INITIAL_LIMIT = 300;
-    // ✅ Arama yapıldığında ekranda gösterilecek max sonuç
-    const LISTBOX_SEARCH_LIMIT = 300;
-
+    const LISTBOX_INITIAL_LIMIT = 0;
+    const LISTBOX_SEARCH_LIMIT = 100;
     const listboxSearchResult = useMemo(() => {
         if (!lb.open || !lb.field) return { options: [], totalMatches: 0 };
 
         let base = [];
 
-        // statik seçenekler
         if (lb.field === "arac_durumu") {
             base = ARAC_DURUMU_OPTIONS;
         } else if (lb.field === "peron_no") {
@@ -1413,41 +1434,28 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
         const rawQuery = String(debouncedLbQuery || "").trim();
 
-        if (!rawQuery) {
+        if (rawQuery.length < 2) {
             return {
-                options: base.slice(0, LISTBOX_INITIAL_LIMIT),
-                totalMatches: base.length,
+                options: [],
+                totalMatches: 0,
             };
         }
-
         const qNorm = normalizeSearchText(rawQuery);
+        const matches = [];
 
-        const exact = [];
-        const startsWith = [];
-        const includes = [];
-
-        for (const val of base) {
-            const rawVal = String(val ?? "").trim();
+        for (let i = 0; i < base.length; i++) {
+            const rawVal = String(base[i] ?? "").trim();
             if (!rawVal) continue;
 
-            const valNorm = normalizeSearchText(rawVal);
-
-            if (!valNorm.includes(qNorm)) continue;
-
-            if (valNorm === qNorm) {
-                exact.push(rawVal);
-            } else if (valNorm.startsWith(qNorm)) {
-                startsWith.push(rawVal);
-            } else {
-                includes.push(rawVal);
+            if (normalizeSearchText(rawVal).includes(qNorm)) {
+                matches.push(rawVal);
+                if (matches.length >= LISTBOX_SEARCH_LIMIT) break;
             }
         }
 
-        const allMatches = [...exact, ...startsWith, ...includes];
-
         return {
-            options: allMatches.slice(0, LISTBOX_SEARCH_LIMIT),
-            totalMatches: allMatches.length,
+            options: matches,
+            totalMatches: matches.length,
         };
     }, [
         lb.open,
@@ -2227,7 +2235,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         <SearchIcon sx={{ color: "rgba(255,255,255,0.65)", fontSize: 18 }} />
                         <InputBase
                             autoFocus
-                            placeholder="Ara..."
+                            placeholder="En az 2 karakter yazın..."
                             value={lb.query}
                             onChange={(e) => setLb((p) => ({ ...p, query: e.target.value }))}
                             sx={s.listboxSearch}
@@ -2247,7 +2255,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     {listboxOptions.length === 0 ? (
                         <Box sx={{ p: 2 }}>
                             <Typography sx={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
-                                {plakaLoading ? "Yükleniyor..." : "Sonuç yok."}
+                                {plakaLoading
+                                    ? "Yükleniyor..."
+                                    : String(lb.query || "").trim().length >= 2
+                                        ? "Sonuç yok."
+                                        : "Aramak için en az 2 karakter yazın."}
                             </Typography>
                         </Box>
                     ) : (

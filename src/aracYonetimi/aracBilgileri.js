@@ -29,8 +29,6 @@ import {
     Alert,
     Tooltip,
     Avatar,
-    ToggleButtonGroup,
-    ToggleButton,
     CircularProgress,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
@@ -63,15 +61,16 @@ const BTN = {
 
 /** --- Sabitler --- */
 const STATUS_OPTIONS = ["AKTİF", "PASİF", "VAR", "YOK"];
-const REQUIRED_FIELDS = ["cekici", "ad_soyad", "tc_no"];
+const REQUIRED_FIELDS_VEHICLE = ["cekici", "ad_soyad", "tc_no"];
+const REQUIRED_FIELDS_DRIVER = ["ad_soyad", "tc_no"];
 
 /** Tablo kolonlarını tek yerden yönet */
 const COLUMNS = [
     { key: "plaka", label: "PLAKA", sortable: false, width: 220 },
     { key: "statu", label: "STATÜ", sortable: true, width: 120 },
-    { key: "tc_no", label: "TC", sortable: true, width: 140 },
-    { key: "ad_soyad", label: "AD SOYAD", sortable: true, width: 220 },
-    { key: "telefon", label: "TELEFON", sortable: true, width: 140 },
+    { key: "tc_no", label: "SÜRÜCÜ TC", sortable: true, width: 140 },
+    { key: "ad_soyad", label: "SÜRÜCÜ ADI", sortable: true, width: 220 },
+    { key: "telefon", label: "SÜRÜCÜ TELEFON", sortable: true, width: 160 },
     { key: "ise_baslama_tarihi", label: "İŞE BAŞLAMA", sortable: true, width: 140 },
     { key: "vkn", label: "VKN", sortable: true, width: 140 },
     { key: "muayene", label: "MUAYENE", sortable: true, width: 140 },
@@ -108,9 +107,6 @@ export default function AracBilgileri() {
     const [filterOpen, setFilterOpen] = useState(false);
     const [filters, setFilters] = useState({ istasyon: "Hepsi" });
 
-    // Default: sadece AKTİF göster
-    const [statuTab, setStatuTab] = useState("AKTİF"); // "AKTİF" | "PASİF"
-
     // Sort
     const [sort, setSort] = useState({ key: "cekici", dir: "asc" });
 
@@ -120,9 +116,10 @@ export default function AracBilgileri() {
     // Create/Edit
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState("create");
+    const [createType, setCreateType] = useState("vehicle"); // vehicle | driver
     const [form, setForm] = useState(blankForm());
 
-    // Soft-delete target
+    // Delete target
     const [deleteTarget, setDeleteTarget] = useState(null);
 
     // Snack
@@ -262,7 +259,7 @@ export default function AracBilgileri() {
         return ["Hepsi", ...Array.from(set)];
     }, [canShow, rows]);
 
-    /** Search + Filter + StatusTab + Sort */
+    /** Search + Filter + Sort */
     const processed = useMemo(() => {
         if (!canShow) return [];
 
@@ -272,10 +269,7 @@ export default function AracBilgileri() {
             const matchIstasyon =
                 filters.istasyon === "Hepsi" || (r.istasyon ?? "") === filters.istasyon;
 
-            const rowStatu = (r.statu ?? "AKTİF").toUpperCase();
-            const matchStatu = rowStatu === statuTab;
-
-            if (!matchIstasyon || !matchStatu) return false;
+            if (!matchIstasyon) return false;
             if (!s) return true;
 
             const haystack = makeSearchText(r);
@@ -290,7 +284,7 @@ export default function AracBilgileri() {
         });
 
         return data;
-    }, [canShow, rows, search, filters, sort, statuTab]);
+    }, [canShow, rows, search, filters, sort]);
 
     const paged = useMemo(() => {
         if (!canShow) return [];
@@ -300,10 +294,11 @@ export default function AracBilgileri() {
 
     useEffect(() => {
         setPage(0);
-    }, [search, filters, statuTab, sort]);
+    }, [search, filters, sort]);
 
-    function openCreate() {
+    function openCreate(type = "vehicle") {
         if (!can(BTN.CREATE)) return;
+        setCreateType(type);
         setFormMode("create");
         setForm(blankForm());
         setFormOpen(true);
@@ -311,6 +306,7 @@ export default function AracBilgileri() {
 
     function openEdit(row) {
         if (!can(BTN.EDIT)) return;
+        setCreateType("vehicle");
         setFormMode("edit");
         setForm({ ...blankForm(), ...row, statu: row?.statu ?? "AKTİF" });
         setFormOpen(true);
@@ -324,9 +320,19 @@ export default function AracBilgileri() {
     async function saveForm() {
         if (!canWrite) return;
 
-        const missing = REQUIRED_FIELDS.find((k) => !String(form[k] ?? "").trim());
+        const requiredFields =
+            createType === "driver" ? REQUIRED_FIELDS_DRIVER : REQUIRED_FIELDS_VEHICLE;
+
+        const missing = requiredFields.find((k) => !String(form[k] ?? "").trim());
         if (missing) {
-            setSnack({ open: true, type: "warning", msg: "Çekici, Ad Soyad ve TC zorunlu." });
+            setSnack({
+                open: true,
+                type: "warning",
+                msg:
+                    createType === "driver"
+                        ? "Sürücü Adı ve Sürücü TC zorunlu."
+                        : "Çekici, Sürücü Adı ve Sürücü TC zorunlu.",
+            });
             return;
         }
 
@@ -352,7 +358,11 @@ export default function AracBilgileri() {
                 if (error) throw error;
 
                 setRows((prev) => [data, ...prev]);
-                setSnack({ open: true, type: "success", msg: "Kayıt eklendi." });
+                setSnack({
+                    open: true,
+                    type: "success",
+                    msg: createType === "driver" ? "Şoför kaydı eklendi." : "Araç kaydı eklendi.",
+                });
             } else {
                 if (!can(BTN.EDIT)) return;
 
@@ -364,7 +374,7 @@ export default function AracBilgileri() {
                 }
 
                 delete payload.id;
-                delete payload.created_at; // istersen bunu da update etme
+                delete payload.created_at;
                 payload.updated_at = new Date().toISOString();
 
                 const { data, error } = await supabase
@@ -390,6 +400,7 @@ export default function AracBilgileri() {
             setLoading(false);
         }
     }
+
     function confirmDelete(row) {
         if (!can(BTN.DELETE)) return;
         setDeleteTarget(row);
@@ -402,23 +413,24 @@ export default function AracBilgileri() {
         try {
             setLoading(true);
 
-            const { data, error } = await supabase
+            const { error } = await supabase
                 .from("plakalar")
-                .update({ statu: "PASİF", updated_at: new Date().toISOString() })
-                .eq("id", deleteTarget.id)
-                .select("*")
-                .single();
+                .delete()
+                .eq("id", deleteTarget.id);
 
             if (error) throw error;
 
-            setRows((prev) => prev.map((r) => (r.id === data.id ? data : r)));
-            if (detail?.id === data.id) setDetail(null);
+            setRows((prev) => prev.filter((r) => r.id !== deleteTarget.id));
 
-            setSnack({ open: true, type: "success", msg: "Kayıt PASİF'e alındı." });
+            if (detail?.id === deleteTarget.id) {
+                setDetail(null);
+            }
+
+            setSnack({ open: true, type: "success", msg: "Kayıt silindi." });
             setDeleteTarget(null);
         } catch (e) {
             console.error(e);
-            setSnack({ open: true, type: "error", msg: e?.message || "İşlem başarısız" });
+            setSnack({ open: true, type: "error", msg: e?.message || "Silme işlemi başarısız" });
         } finally {
             setLoading(false);
         }
@@ -482,17 +494,31 @@ export default function AracBilgileri() {
                 </Stack>
 
                 {can(BTN.CREATE) && (
-                    <Tooltip title="Yeni Kayıt">
-                        <Button
-                            variant="contained"
-                            disableElevation
-                            startIcon={<Add />}
-                            sx={styles.addButton}
-                            onClick={openCreate}
-                        >
-                            Yeni Kayıt Ekle
-                        </Button>
-                    </Tooltip>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                        <Tooltip title="Yeni Araç">
+                            <Button
+                                variant="contained"
+                                disableElevation
+                                startIcon={<Add />}
+                                sx={styles.addButton}
+                                onClick={() => openCreate("vehicle")}
+                            >
+                                Yeni Araç Ekle
+                            </Button>
+                        </Tooltip>
+
+                        <Tooltip title="Şoför Ekle">
+                            <Button
+                                variant="outlined"
+                                disableElevation
+                                startIcon={<Add />}
+                                sx={styles.driverButton}
+                                onClick={() => openCreate("driver")}
+                            >
+                                Şoför Ekle
+                            </Button>
+                        </Tooltip>
+                    </Stack>
                 )}
             </Box>
 
@@ -519,10 +545,10 @@ export default function AracBilgileri() {
                 <KpiCard title="GPS Yok" value={kpi.gpsYok} icon={<PauseCircleRounded />} accent="neutral" />
             </Box>
 
-            {/* SEARCH + TAB + FILTER */}
+            {/* SEARCH + FILTER */}
             <Box sx={styles.filterRow}>
                 <TextField
-                    placeholder="Çekici, dorse, TC, ad soyad, telefon, VKN, istasyon..."
+                    placeholder="Çekici, dorse, sürücü tc, sürücü adı, telefon, VKN, istasyon..."
                     size="small"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -535,16 +561,6 @@ export default function AracBilgileri() {
                     }}
                     sx={styles.searchField}
                 />
-
-                <ToggleButtonGroup
-                    exclusive
-                    value={statuTab}
-                    onChange={(_, v) => v && setStatuTab(v)}
-                    sx={styles.segment}
-                >
-                    <ToggleButton value="AKTİF">Aktif</ToggleButton>
-                    <ToggleButton value="PASİF">Pasif</ToggleButton>
-                </ToggleButtonGroup>
 
                 {can(BTN.FILTER) && (
                     <Tooltip title="Gelişmiş Filtreler">
@@ -653,7 +669,7 @@ export default function AracBilgileri() {
                                         )}
 
                                         {can(BTN.DELETE) && (
-                                            <Tooltip title="Pasif'e Al">
+                                            <Tooltip title="Sil">
                                                 <IconButton sx={styles.actionDelete} onClick={() => confirmDelete(row)}>
                                                     <DeleteOutline fontSize="small" />
                                                 </IconButton>
@@ -816,8 +832,8 @@ export default function AracBilgileri() {
                                 <InfoRow label="Statü" value={StatuChip(detail.statu)} />
                                 <InfoRow label="Çekici" value={safeText(detail.cekici)} />
                                 <InfoRow label="Dorse" value={safeText(detail.dorse)} />
-                                <InfoRow label="TC" value={safeText(detail.tc_no)} />
-                                <InfoRow label="Telefon" value={safeText(detail.telefon)} />
+                                <InfoRow label="Sürücü TC" value={safeText(detail.tc_no)} />
+                                <InfoRow label="Sürücü Telefon" value={safeText(detail.telefon)} />
                                 <InfoRow label="İşe Başlama" value={safeText(detail.ise_baslama_tarihi)} />
                                 <InfoRow label="VKN" value={safeText(detail.vkn)} />
                                 <InfoRow label="Muayene" value={safeText(detail.muayene)} />
@@ -854,7 +870,7 @@ export default function AracBilgileri() {
                                                     fullWidth
                                                     startIcon={<DeleteOutline />}
                                                 >
-                                                    Pasif'e Al
+                                                    Sil
                                                 </Button>
                                             )}
                                         </Stack>
@@ -869,40 +885,47 @@ export default function AracBilgileri() {
             {/* CREATE/EDIT DIALOG */}
             <Dialog open={formOpen} onClose={() => setFormOpen(false)} fullWidth maxWidth="md">
                 <DialogTitle sx={styles.dialogTitle}>
-                    {formMode === "create" ? "Yeni Kayıt Ekle" : "Kayıt Düzenle"}
+                    {formMode === "create"
+                        ? createType === "driver"
+                            ? "Yeni Şoför Ekle"
+                            : "Yeni Araç Ekle"
+                        : "Kayıt Düzenle"}
                 </DialogTitle>
+
                 <DialogContent sx={styles.dialogContent}>
                     <Stack spacing={2} sx={{ pt: 1 }}>
-                        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                            <TextField
-                                label="Çekici"
-                                value={form.cekici}
-                                onChange={(e) => setForm((p) => ({ ...p, cekici: e.target.value }))}
-                                fullWidth
-                            />
-                            <TextField
-                                label="Dorse"
-                                value={form.dorse}
-                                onChange={(e) => setForm((p) => ({ ...p, dorse: e.target.value }))}
-                                fullWidth
-                            />
-                        </Stack>
+                        {createType !== "driver" && (
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                                <TextField
+                                    label="Çekici"
+                                    value={form.cekici}
+                                    onChange={(e) => setForm((p) => ({ ...p, cekici: e.target.value }))}
+                                    fullWidth
+                                />
+                                <TextField
+                                    label="Dorse"
+                                    value={form.dorse}
+                                    onChange={(e) => setForm((p) => ({ ...p, dorse: e.target.value }))}
+                                    fullWidth
+                                />
+                            </Stack>
+                        )}
 
                         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                             <TextField
-                                label="TC"
+                                label="Sürücü TC"
                                 value={form.tc_no}
                                 onChange={(e) => setForm((p) => ({ ...p, tc_no: e.target.value }))}
                                 fullWidth
                             />
                             <TextField
-                                label="Ad Soyad"
+                                label="Sürücü Adı"
                                 value={form.ad_soyad}
                                 onChange={(e) => setForm((p) => ({ ...p, ad_soyad: e.target.value }))}
                                 fullWidth
                             />
                             <TextField
-                                label="Telefon"
+                                label="Sürücü Telefon"
                                 value={form.telefon}
                                 onChange={(e) => setForm((p) => ({ ...p, telefon: e.target.value }))}
                                 fullWidth
@@ -998,12 +1021,12 @@ export default function AracBilgileri() {
                 </DialogActions>
             </Dialog>
 
-            {/* SOFT DELETE CONFIRM */}
+            {/* DELETE CONFIRM */}
             <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
-                <DialogTitle sx={{ fontWeight: 900 }}>Pasif'e Alma Onayı</DialogTitle>
+                <DialogTitle sx={{ fontWeight: 900 }}>Silme Onayı</DialogTitle>
                 <DialogContent>
                     <Typography sx={{ color: "rgba(0,0,0,0.65)" }}>
-                        <b>{deleteTarget?.ad_soyad}</b> kaydı PASİF'e alınacak. Emin misiniz?
+                        <b>{deleteTarget?.ad_soyad}</b> kaydı kalıcı olarak silinecek. Emin misiniz?
                     </Typography>
                 </DialogContent>
                 <DialogActions>
@@ -1011,7 +1034,7 @@ export default function AracBilgileri() {
 
                     {can(BTN.DELETE) && (
                         <Button variant="contained" disableElevation color="error" onClick={doDelete}>
-                            Pasif'e Al
+                            Sil
                         </Button>
                     )}
                 </DialogActions>
@@ -1279,6 +1302,20 @@ const styles = {
         color: "#0b1220",
         "&:hover": { background: "#e2e8f0" },
     },
+    driverButton: {
+        textTransform: "none",
+        fontWeight: 900,
+        borderRadius: "14px",
+        px: 2.4,
+        py: 1.15,
+        borderColor: "rgba(255,255,255,0.18)",
+        color: "#fff",
+        background: "rgba(255,255,255,0.06)",
+        "&:hover": {
+            borderColor: "rgba(255,255,255,0.32)",
+            background: "rgba(255,255,255,0.10)",
+        },
+    },
 
     kpiGrid: {
         display: "grid",
@@ -1315,24 +1352,6 @@ const styles = {
             "& fieldset": { borderColor: "rgba(255,255,255,0.12)" },
             "&:hover fieldset": { borderColor: "rgba(255,255,255,0.22)" },
             "&.Mui-focused fieldset": { borderColor: "#3b82f6" },
-        },
-    },
-    segment: {
-        "& .MuiToggleButton-root": {
-            color: "rgba(255,255,255,0.75)",
-            borderColor: "rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.04)",
-            borderRadius: "14px !important",
-            px: 1.6,
-            py: 0.9,
-            textTransform: "none",
-            fontWeight: 900,
-            "&.Mui-selected": {
-                color: "#fff",
-                background: "rgba(59,130,246,0.22)",
-                borderColor: "rgba(59,130,246,0.35)",
-            },
-            "&:hover": { background: "rgba(255,255,255,0.06)" },
         },
     },
     filterButton: {

@@ -55,7 +55,7 @@ export default function Auth({ onGirisBasarili }) {
         e.preventDefault();
         setHata("");
 
-        const mailKismi = (formData.mail || "").trim();
+        const mailKismi = (formData.mail || "").trim().toLowerCase();
         if (!mailKismi) return setHata("Kullanıcı adı boş olamaz.");
 
         const tamMail = mailKismi + DOMAIN;
@@ -72,18 +72,25 @@ export default function Auth({ onGirisBasarili }) {
             if (isLogin) {
                 const { data, error } = await supabase
                     .from("kullanicilar")
-                    .select("id,mail,rol_id,rol,kullanici") // rol_id varsa da al
+                    .select("id,mail,rol_id,rol,kullanici")
                     .eq("mail", tamMail)
                     .eq("sifre", formData.sifre)
                     .maybeSingle();
 
                 if (error || !data) throw new Error("Giriş bilgileri hatalı.");
 
-                // ✅ EN KRİTİK DÜZELTME: localStorage'a yaz
-                localStorage.setItem(LS_KEY, JSON.stringify(data));
+                const sessionUser = {
+                    id: data.id,
+                    username: mailKismi,           // fatih.almali
+                    mail: data.mail,               // fatih.almali@odaklojistik.com.tr
+                    displayName: data.kullanici,   // örn: FATİH ALMALI veya DB’de ne varsa
+                    rol: data.rol,
+                    rol_id: data.rol_id,
+                };
 
-                // İstersen burada yönlendirme/state yönetimi
-                onGirisBasarili?.(data);
+                localStorage.setItem(LS_KEY, JSON.stringify(sessionUser));
+
+                onGirisBasarili?.(sessionUser);
             } else {
                 const { error } = await supabase.from("kullanicilar").insert([
                     {
@@ -109,12 +116,8 @@ export default function Auth({ onGirisBasarili }) {
         }
     };
 
-    // (Opsiyonel) logout helper - başka yerde de kullanabilirsin
-    // const logout = () => localStorage.removeItem(LS_KEY);
-
     return (
         <Box sx={stil.sayfaKonterner}>
-            {/* BAŞARI MODALI */}
             <AnimatePresence>
                 {kayitBasarili && (
                     <Backdrop
@@ -145,7 +148,6 @@ export default function Auth({ onGirisBasarili }) {
             </AnimatePresence>
 
             <Paper elevation={0} sx={stil.anaKart}>
-                {/* SOL PANEL */}
                 {!isMobile && (
                     <Box sx={stil.solPanel}>
                         <Box sx={stil.degradeDaire} />
@@ -177,7 +179,6 @@ export default function Auth({ onGirisBasarili }) {
                     </Box>
                 )}
 
-                {/* SAĞ PANEL */}
                 <Box sx={stil.sagPanel}>
                     <Box sx={{ width: "100%", maxWidth: 380 }}>
                         <Typography variant="h4" sx={{ fontWeight: 900, mb: 1, color: "white" }}>
