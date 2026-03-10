@@ -15,7 +15,9 @@ import {
     Avatar,
     Chip,
     Stack,
+    useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import {
     Dashboard,
     Assignment,
@@ -101,7 +103,9 @@ function NavAction({ open, active, icon, label, onClick, primary = false }) {
                         },
                     }}
                 >
-                    <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.8 : 0, justifyContent: "center" }}>{icon}</ListItemIcon>
+                    <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.8 : 0, justifyContent: "center" }}>
+                        {icon}
+                    </ListItemIcon>
                     {open && (
                         <ListItemText
                             primary={label}
@@ -115,8 +119,12 @@ function NavAction({ open, active, icon, label, onClick, primary = false }) {
 }
 
 export default function Sidebar({ open, setOpen, selected, onSelect }) {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
     const drawerWidth = 298;
     const collapsedWidth = 92;
+    const sidebarExpanded = isMobile ? true : open;
 
     const [expanded, setExpanded] = React.useState({
         kullaniciIslemleri: true,
@@ -126,6 +134,11 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
 
     const toggleGroup = (key) => {
         setExpanded((p) => ({ ...p, [key]: !p[key] }));
+    };
+
+    const handleItemSelect = (key) => {
+        onSelect(key);
+        if (isMobile) setOpen(false);
     };
 
     const sx = {
@@ -153,13 +166,13 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
             height: "100%",
             display: "flex",
             flexDirection: "column",
-            px: open ? 2 : 1.5,
+            px: sidebarExpanded ? 2 : 1.5,
             py: 1.8,
             gap: 1.5,
         },
         topCard: {
             borderRadius: 4,
-            p: open ? 1.6 : 1.2,
+            p: sidebarExpanded ? 1.6 : 1.2,
             border: "1px solid rgba(255,255,255,0.08)",
             background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))",
             boxShadow: "0 16px 36px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)",
@@ -195,7 +208,7 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
             fontSize: 11,
         },
         sectionTitle: {
-            px: open ? 0.6 : 0,
+            px: sidebarExpanded ? 0.6 : 0,
             mt: 0.4,
             mb: 0.3,
             color: "rgba(255,255,255,0.34)",
@@ -203,7 +216,7 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
             fontSize: 11,
             letterSpacing: 1.5,
             textTransform: "uppercase",
-            textAlign: open ? "left" : "center",
+            textAlign: sidebarExpanded ? "left" : "center",
         },
         groupCard: {
             mb: 1.1,
@@ -217,8 +230,8 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
         groupBtn: {
             minHeight: 56,
             borderRadius: 0,
-            px: open ? 1.4 : 0,
-            justifyContent: open ? "initial" : "center",
+            px: sidebarExpanded ? 1.4 : 0,
+            justifyContent: sidebarExpanded ? "initial" : "center",
             transition: "all .2s ease",
             "&:hover": { background: "rgba(255,255,255,0.04)" },
         },
@@ -278,25 +291,25 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
 
     return (
         <Drawer
-            variant="permanent"
+            variant={isMobile ? "temporary" : "permanent"}
             open={open}
+            onClose={() => isMobile && setOpen(false)}
+            ModalProps={{ keepMounted: true }}
             sx={{
-                width: open ? drawerWidth : collapsedWidth,
+                width: isMobile ? drawerWidth : open ? drawerWidth : collapsedWidth,
                 flexShrink: 0,
                 whiteSpace: "nowrap",
                 boxSizing: "border-box",
-                transition: (theme) =>
-                    theme.transitions.create("width", {
-                        easing: theme.transitions.easing.sharp,
-                        duration: theme.transitions.duration.enteringScreen,
-                    }),
                 "& .MuiDrawer-paper": {
-                    width: open ? drawerWidth : collapsedWidth,
-                    transition: (theme) =>
-                        theme.transitions.create("width", {
-                            easing: theme.transitions.easing.sharp,
-                            duration: theme.transitions.duration.enteringScreen,
-                        }),
+                    width: isMobile ? drawerWidth : open ? drawerWidth : collapsedWidth,
+                    maxWidth: "82vw",
+                    transition: isMobile
+                        ? "none"
+                        : (theme) =>
+                            theme.transitions.create("width", {
+                                easing: theme.transitions.easing.sharp,
+                                duration: theme.transitions.duration.enteringScreen,
+                            }),
                     ...sx.drawerPaper,
                 },
             }}
@@ -304,7 +317,7 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
             <Box sx={sx.shell}>
                 <Box sx={sx.topCard}>
                     <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.2}>
-                        {open ? (
+                        {sidebarExpanded ? (
                             <Stack direction="row" alignItems="center" spacing={1.3} sx={{ minWidth: 0 }}>
                                 <Box sx={sx.logoBox}>
                                     <Dashboard sx={{ color: "#fff", fontSize: 22 }} />
@@ -335,14 +348,14 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                             </Box>
                         )}
 
-                        {open && (
+                        {sidebarExpanded && (
                             <IconButton onClick={() => setOpen(false)} sx={sx.toggleBtn}>
                                 <ChevronLeft />
                             </IconButton>
                         )}
                     </Stack>
 
-                    {open ? (
+                    {sidebarExpanded ? (
                         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1.4 }}>
                             <Chip icon={<Bolt sx={{ fontSize: 15 }} />} label="Ultra UI" sx={sx.miniBadge} />
                             <Chip icon={<AutoAwesome sx={{ fontSize: 15 }} />} label="Modern" sx={sx.miniBadge} />
@@ -357,14 +370,14 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                 </Box>
 
                 <Box>
-                    {open && <Typography sx={sx.sectionTitle}>Ana Navigasyon</Typography>}
+                    {sidebarExpanded && <Typography sx={sx.sectionTitle}>Ana Navigasyon</Typography>}
                     <List sx={{ px: 0, py: 0.2 }}>
                         <NavAction
-                            open={open}
+                            open={sidebarExpanded}
                             active={selected === "anasayfa"}
                             label="Ana Sayfa"
                             icon={<Dashboard />}
-                            onClick={() => onSelect("anasayfa")}
+                            onClick={() => handleItemSelect("anasayfa")}
                             primary
                         />
                     </List>
@@ -372,8 +385,8 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
 
                 <Divider sx={{ borderColor: "rgba(255,255,255,0.05)" }} />
 
-                <Box sx={{ overflowY: "auto", pr: open ? 0.2 : 0, flex: 1 }}>
-                    {open && <Typography sx={sx.sectionTitle}>Modüller</Typography>}
+                <Box sx={{ overflowY: "auto", pr: sidebarExpanded ? 0.2 : 0, flex: 1 }}>
+                    {sidebarExpanded && <Typography sx={sx.sectionTitle}>Modüller</Typography>}
 
                     <List sx={{ p: 0 }}>
                         {groups.map((group) => {
@@ -382,19 +395,38 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                             return (
                                 <Box key={group.key} sx={sx.groupCard}>
                                     <ListItem disablePadding>
-                                        <Tooltip title={!open ? group.title : ""} placement="right" arrow>
+                                        <Tooltip title={!sidebarExpanded ? group.title : ""} placement="right" arrow>
                                             <ListItemButton onClick={() => toggleGroup(group.key)} sx={sx.groupBtn}>
-                                                <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.4 : 0, justifyContent: "center" }}>
+                                                <ListItemIcon
+                                                    sx={{
+                                                        minWidth: 0,
+                                                        mr: sidebarExpanded ? 1.4 : 0,
+                                                        justifyContent: "center",
+                                                    }}
+                                                >
                                                     <Box sx={sx.groupIconWrap(group.accent)}>{group.icon}</Box>
                                                 </ListItemIcon>
 
-                                                {open && (
+                                                {sidebarExpanded && (
                                                     <>
                                                         <Box sx={{ minWidth: 0, flex: 1 }}>
-                                                            <Typography sx={{ color: "#eef6ff", fontWeight: 900, fontSize: "0.84rem", lineHeight: 1.1 }}>
+                                                            <Typography
+                                                                sx={{
+                                                                    color: "#eef6ff",
+                                                                    fontWeight: 900,
+                                                                    fontSize: "0.84rem",
+                                                                    lineHeight: 1.1,
+                                                                }}
+                                                            >
                                                                 {group.title}
                                                             </Typography>
-                                                            <Typography sx={{ color: "rgba(255,255,255,0.45)", fontSize: 11, mt: 0.35 }}>
+                                                            <Typography
+                                                                sx={{
+                                                                    color: "rgba(255,255,255,0.45)",
+                                                                    fontSize: 11,
+                                                                    mt: 0.35,
+                                                                }}
+                                                            >
                                                                 {group.caption}
                                                             </Typography>
                                                         </Box>
@@ -409,19 +441,27 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                                         </Tooltip>
                                     </ListItem>
 
-                                    <Collapse in={open ? isOpen : false} timeout="auto" unmountOnExit>
+                                    <Collapse in={sidebarExpanded ? isOpen : false} timeout="auto" unmountOnExit>
                                         <List sx={{ pb: 0.6 }}>
                                             {group.items.map((item) => {
                                                 const active = selected === item.key;
                                                 return (
                                                     <ListItem key={item.key} disablePadding>
-                                                        <ListItemButton onClick={() => onSelect(item.key)} sx={sx.childBtn(active)}>
+                                                        <ListItemButton
+                                                            onClick={() => handleItemSelect(item.key)}
+                                                            sx={sx.childBtn(active)}
+                                                        >
                                                             <ListItemIcon sx={{ minWidth: 34 }}>{item.icon}</ListItemIcon>
                                                             <ListItemText
                                                                 primary={item.text}
-                                                                primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: active ? 900 : 700 }}
+                                                                primaryTypographyProps={{
+                                                                    fontSize: "0.82rem",
+                                                                    fontWeight: active ? 900 : 700,
+                                                                }}
                                                             />
-                                                            {active && <FiberManualRecord sx={{ fontSize: 10, color: "#60a5fa" }} />}
+                                                            {active && (
+                                                                <FiberManualRecord sx={{ fontSize: 10, color: "#60a5fa" }} />
+                                                            )}
                                                         </ListItemButton>
                                                     </ListItem>
                                                 );
@@ -429,14 +469,17 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                                         </List>
                                     </Collapse>
 
-                                    {!open && (
+                                    {!sidebarExpanded && !isMobile && (
                                         <List sx={{ px: 1, pb: 1 }}>
                                             {group.items.map((item) => {
                                                 const active = selected === item.key;
                                                 return (
                                                     <ListItem key={item.key} disablePadding>
                                                         <Tooltip title={item.text} placement="right" arrow>
-                                                            <ListItemButton onClick={() => onSelect(item.key)} sx={sx.collapsedIconBtn(active)}>
+                                                            <ListItemButton
+                                                                onClick={() => handleItemSelect(item.key)}
+                                                                sx={sx.collapsedIconBtn(active)}
+                                                            >
                                                                 <ListItemIcon
                                                                     sx={{
                                                                         minWidth: 0,
@@ -460,7 +503,7 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                 </Box>
 
                 <Box sx={sx.footer}>
-                    {open ? (
+                    {sidebarExpanded ? (
                         <Stack direction="row" alignItems="center" spacing={1.2}>
                             <Avatar
                                 variant="rounded"
@@ -476,7 +519,9 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                                 B
                             </Avatar>
                             <Box sx={{ minWidth: 0 }}>
-                                <Typography sx={{ color: "#fff", fontWeight: 900, fontSize: 13 }}>BAPSİS Panel</Typography>
+                                <Typography sx={{ color: "#fff", fontWeight: 900, fontSize: 13 }}>
+                                    BAPSİS Panel
+                                </Typography>
                                 <Typography sx={{ color: "rgba(255,255,255,0.48)", fontSize: 11 }}>
                                     Smart navigation experience
                                 </Typography>

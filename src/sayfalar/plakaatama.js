@@ -73,7 +73,7 @@ const BTN = {
     ROW_OPEN_LISTBOX: "plakaatama.row.open_listbox",
 };
 
-const ARAC_DURUMU_OPTIONS = ["DEPODA", "SAAT SEÇ"];
+const ARAC_DURUMU_OPTIONS = ["DEPODA", "SAAT EKLE"];
 
 const PERON_OPTIONS = Array.from({ length: 60 }, (_, i) => `${i + 1}.PERON`);
 
@@ -678,6 +678,35 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             setPlakaLoading(false);
         }
     }, []);
+
+    const handleCreateDriver = useCallback(
+        async (payload) => {
+            const insertPayload = {
+                cekici: "",
+                dorse: "",
+                ad_soyad: payload.ad_soyad?.trim() || "",
+                telefon: payload.telefon?.trim() || "",
+                tc_no: payload.tc_no?.trim() || "",
+                vkn: "",
+                tip: "",
+            };
+
+            const { data, error } = await supabase
+                .from("plakalar")
+                .insert([insertPayload])
+                .select("id, cekici, dorse, tc_no, ad_soyad, telefon, vkn, tip")
+                .single();
+
+            if (error) {
+                throw new Error(error.message || "Şoför kaydı oluşturulamadı.");
+            }
+
+            setPlakalar((prev) => [data, ...prev]);
+
+            return data;
+        },
+        []
+    );
     const ensurePlakalarLoaded = useCallback(async () => {
         if (plakaLoading) return;
         if (Array.isArray(plakalar) && plakalar.length > 0) return;
@@ -1477,6 +1506,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         if (!lb.open || !lb.field) return { options: [], totalMatches: 0 };
 
         let base = [];
+        const isDirectListField = lb.field === "arac_durumu" || lb.field === "peron_no";
 
         if (lb.field === "arac_durumu") {
             base = ARAC_DURUMU_OPTIONS;
@@ -1490,12 +1520,22 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
         const rawQuery = String(debouncedLbQuery || "").trim();
 
+        // ✅ araç durumu ve peron no için direkt liste göster
+        if (isDirectListField) {
+            return {
+                options: base.slice(0, LISTBOX_SEARCH_LIMIT),
+                totalMatches: base.length,
+            };
+        }
+
+        // diğer alanlarda arama devam etsin
         if (rawQuery.length < 2) {
             return {
                 options: [],
                 totalMatches: 0,
             };
         }
+
         const qNorm = normalizeSearchText(rawQuery);
         const matches = [];
 
@@ -1537,7 +1577,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     return;
                 }
 
-                if (pickedValue === "SAAT SEÇ") {
+                if (pickedValue === "SAAT EKLE") {
                     closeListbox();
                     openTimeDialog(rowId);
                     return;
@@ -1882,18 +1922,34 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             return;
         }
 
-        const dbIds = toMove.map((r) => r.__db_id).filter((x) => x != null);
-        if (dbIds.length === 0) {
-            setSnack({ open: true, msg: "Seçili satırlarda DB id yok (tamamlama iptal).", sev: "warning" });
+        // ✅ Sefer no boş olanları ayır
+        const validRows = toMove.filter((r) => String(r.sefer ?? "").trim() !== "");
+        const invalidRows = toMove.filter((r) => String(r.sefer ?? "").trim() === "");
+
+        if (validRows.length === 0) {
+            setSnack({
+                open: true,
+                msg: "Sefer No boş olan satırlar tamamlanamaz.",
+                sev: "warning",
+            });
             return;
         }
 
+        const dbIds = validRows.map((r) => r.__db_id).filter((x) => x != null);
+        if (dbIds.length === 0) {
+            setSnack({
+                open: true,
+                msg: "Tamamlanacak satırlarda DB id yok (işlem iptal).",
+                sev: "warning",
+            });
+            return;
+        }
         try {
             setSaving(true);
 
             const nowIso = new Date().toISOString();
 
-            const payload = toMove.map((r, idx) => ({
+            const payload = validRows.map((r, idx) => ({
                 batch_id: String(r.__batch_id ?? batchId ?? ""),
                 line_no: r.__line_no ?? idx + 1,
 
@@ -1935,7 +1991,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 const { error } = await supabase.from("tamamlanan_seferler").insert(part);
                 if (error) {
                     console.error("complete insert error:", error);
-                    setSnack({ open: true, msg: error.message || "Tamamlama (insert) hatası", sev: "error" });
+                    setSnack({
+                        open: true,
+                        msg: error.message || "Tamamlama (insert) hatası",
+                        sev: "error",
+                    });
                     return;
                 }
             }
@@ -1950,7 +2010,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 });
             }
 
-            setSnack({ open: true, msg: `Sefer tamamlandı ✅ (${dbIds.length})`, sev: "success" });
+            setSnack({
+                open: true,
+                msg:
+                    invalidRows.length > 0
+                        ? `Sefer tamamlandı ✅ (${dbIds.length}) • ${invalidRows.length} satır Sefer No boş olduğu için atlandı`
+                        : `Sefer tamamlandı ✅ (${dbIds.length})`,
+                sev: "success",
+            });
+
             clearSelection();
             await fetchRows();
         } catch (e) {
@@ -2312,24 +2380,31 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 PaperProps={{ sx: s.listboxPaper }}
             >
                 <Box sx={{ p: 1.2, pb: 1 }}>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                        <SearchIcon sx={{ color: "rgba(255,255,255,0.65)", fontSize: 18 }} />
-                        <InputBase
-                            autoFocus
-                            placeholder="En az 2 karakter yazın..."
-                            value={lb.query}
-                            onChange={(e) => setLb((p) => ({ ...p, query: e.target.value }))}
-                            sx={s.listboxSearch}
-                        />
-                    </Stack>
+                    {lb.field !== "arac_durumu" && lb.field !== "peron_no" ? (
+                        <>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                                <SearchIcon sx={{ color: "rgba(255,255,255,0.65)", fontSize: 18 }} />
+                                <InputBase
+                                    autoFocus
+                                    placeholder="En az 2 karakter yazın..."
+                                    value={lb.query}
+                                    onChange={(e) => setLb((p) => ({ ...p, query: e.target.value }))}
+                                    sx={s.listboxSearch}
+                                />
+                            </Stack>
 
-                    <Typography sx={{ mt: 0.8, color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
-                        {String(lb.query || "").trim()
-                            ? `Eşleşen: ${listboxTotalMatches} • Gösterilen: ${listboxOptions.length}`
-                            : `Toplam: ${listboxTotalMatches} • Gösterilen: ${listboxOptions.length}`}
-                    </Typography>
+                            <Typography sx={{ mt: 0.8, color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
+                                {String(lb.query || "").trim()
+                                    ? `Eşleşen: ${listboxTotalMatches} • Gösterilen: ${listboxOptions.length}`
+                                    : `Toplam: ${listboxTotalMatches} • Gösterilen: ${listboxOptions.length}`}
+                            </Typography>
+                        </>
+                    ) : (
+                        <Typography sx={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>
+                            {lb.field === "arac_durumu" ? "Araç durumu seçin" : "Peron seçin"}
+                        </Typography>
+                    )}
                 </Box>
-
                 <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
 
                 <List dense sx={{ maxHeight: 320, overflow: "auto" }}>
@@ -2338,9 +2413,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                             <Typography sx={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
                                 {plakaLoading
                                     ? "Yükleniyor..."
-                                    : String(lb.query || "").trim().length >= 2
-                                        ? "Sonuç yok."
-                                        : "Aramak için en az 2 karakter yazın."}
+                                    : lb.field === "arac_durumu" || lb.field === "peron_no"
+                                        ? "Seçenek bulunamadı."
+                                        : String(lb.query || "").trim().length >= 2
+                                            ? "Sonuç yok."
+                                            : "Aramak için en az 2 karakter yazın."}
                             </Typography>
                         </Box>
                     ) : (
@@ -2440,7 +2517,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             {/* SWAP */}
             <SoforSwapDialog
                 open={swapDlg.open}
-                onClose={() => setSwapDlg({ open: false, rowId: null, query: "", targetPlakaId: null, sourcePlaka: null })}
+                onClose={() =>
+                    setSwapDlg({
+                        open: false,
+                        rowId: null,
+                        query: "",
+                        targetPlakaId: null,
+                        sourcePlaka: null,
+                    })
+                }
                 s={s}
                 sourceRow={rows.find((r) => r.id === swapDlg.rowId) || null}
                 sourcePlaka={swapDlg.sourcePlaka}
@@ -2449,11 +2534,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 targets={plakalar}
                 targetPlakaId={swapDlg.targetPlakaId}
                 setTargetPlakaId={(id) => setSwapDlg((p) => ({ ...p, targetPlakaId: id }))}
+                onCreateDriver={handleCreateDriver}
                 onSwap={() => {
                     if (!perm.ekranYazma || !can(BTN.ROW_SWAP_DRIVER)) return;
 
                     const tgt = plakalar.find((p) => p.id === swapDlg.targetPlakaId);
-                    if (!tgt) return;
+                    if (!tgt) {
+                        setSnack({ open: true, msg: "Seçilen şoför bulunamadı.", sev: "warning" });
+                        return;
+                    }
 
                     patchRow(swapDlg.rowId, {
                         surucu: tgt.ad_soyad ?? "",
@@ -2464,10 +2553,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     scheduleAutoSave(swapDlg.rowId);
 
                     setSnack({ open: true, msg: "Şoför bilgisi güncellendi ✅", sev: "success" });
-                    setSwapDlg({ open: false, rowId: null, query: "", targetPlakaId: null, sourcePlaka: null });
+                    setSwapDlg({
+                        open: false,
+                        rowId: null,
+                        query: "",
+                        targetPlakaId: null,
+                        sourcePlaka: null,
+                    });
                 }}
             />
-
             {/* ✅ VKN DEĞİŞTİRME PANELİ */}
             <VknDegistirme
                 open={vknDlg.open}
