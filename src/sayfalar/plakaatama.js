@@ -2006,14 +2006,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             <Box
                 sx={{
                     ...s.page,
-                    height: "100%",
-                    maxHeight: "100%",
+                    height: "100dvh",
+                    maxHeight: "100dvh",
                     minHeight: 0,
                     overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "center",
+                    px: 2,
                 }}
             >
                 <Stack spacing={1} alignItems="center">
@@ -2031,13 +2032,14 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             <Box
                 sx={{
                     ...s.page,
-                    height: "100vh",
-                    maxHeight: "100vh",
+                    height: "100dvh",
+                    maxHeight: "100dvh",
                     overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "center",
+                    px: 2,
                 }}
             >
                 <Stack
@@ -2060,8 +2062,8 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         <Box
             sx={{
                 ...s.page,
-                height: "100vh",
-                maxHeight: "100vh",
+                height: "100dvh",
+                maxHeight: "100dvh",
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
@@ -2071,8 +2073,8 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             <Box
                 sx={{
                     ...s.hero,
-                    py: 1.25,
-                    px: 1.5,
+                    py: { xs: 1, sm: 1.25 },
+                    px: { xs: 1, sm: 1.5 },
                     mb: 1,
                     flexShrink: 0,
                 }}
@@ -2093,12 +2095,29 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     ) : null}
                 </Stack>
 
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-end">
+                <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: "stretch", md: "flex-end" }}
+                    spacing={{ xs: 1.25, md: 0 }}
+                >
                     <Box>
-                        <Typography sx={{ ...s.heroTitle, fontSize: 24, lineHeight: 1.1 }}>
+                        <Typography
+                            sx={{
+                                ...s.heroTitle,
+                                fontSize: { xs: 20, sm: 24 },
+                                lineHeight: 1.1,
+                            }}
+                        >
                             Plaka Atama
                         </Typography>
-                        <Typography sx={{ ...s.heroSub, fontSize: 12, mt: 0.25 }}>
+                        <Typography
+                            sx={{
+                                ...s.heroSub,
+                                fontSize: { xs: 11.5, sm: 12 },
+                                mt: 0.25,
+                            }}
+                        >
                             Operasyonel verileri tek ekrandan güncelleyin.
                         </Typography>
                     </Box>
@@ -2109,7 +2128,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         sx={{
                             mb: 0.5,
                             flexWrap: "wrap",
-                            justifyContent: "flex-end",
+                            justifyContent: { xs: "flex-start", md: "flex-end" },
                             rowGap: 1,
                         }}
                     >
@@ -2182,9 +2201,16 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     flexWrap: "wrap",
                     flexShrink: 0,
                     rowGap: 1,
+                    columnGap: 1,
                 }}
             >
-                <Box sx={s.search}>
+                <Box
+                    sx={{
+                        ...s.search,
+                        width: { xs: "100%", sm: "auto" },
+                        minWidth: { xs: "100%", sm: 260 },
+                    }}
+                >
                     <SearchIcon sx={{ color: "#3b82f6", fontSize: 20 }} />
                     <InputBase
                         placeholder="Hızlı ara..."
@@ -2193,7 +2219,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         onChange={(e) => setQ(e.target.value)}
                     />
                 </Box>
-
                 <Chip icon={<TimelineIcon />} label="Canlı Akış" sx={s.pillActive} />
 
                 <Chip
@@ -2214,10 +2239,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 {loading ? (
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 1 }}>
                         <CircularProgress size={16} />
-                        <Typography sx={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>Yükleniyor...</Typography>
+                        <Typography sx={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
+                            Yükleniyor...
+                        </Typography>
                     </Stack>
                 ) : null}
-
                 {autoSaving ? (
                     <Chip label="Otomatik kaydediliyor..." sx={s.pillActive} />
                 ) : lastAutoSaveAt ? (
@@ -2248,12 +2274,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             <Box
                 sx={{
                     flex: "1 1 auto",
-                    height: "72vh",
-                    minHeight: 500,
-                    maxHeight: "74vh",
+                    minHeight: 0,
+                    maxHeight: { xs: "68dvh", md: "74dvh" },
                     overflow: "hidden",
                     display: "flex",
-                    pb: 2,
+                    pb: { xs: 1, sm: 2 },
                 }}
             >
                 <PlakaAtamaGrid
@@ -2466,6 +2491,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     s={s}
                     openListbox={openListbox}
                     handleChange={handleChange}
+                    canEdit={perm.ekranYazma && can(BTN.ROW_EDIT)}
                 />
             )}
 

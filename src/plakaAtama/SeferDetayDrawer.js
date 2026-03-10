@@ -1,5 +1,6 @@
 ﻿// src/plakaAtama/SeferDetayDrawer.js
 import React from "react";
+import { Html5Qrcode } from "html5-qrcode";
 import {
     Drawer,
     Box,
@@ -12,6 +13,10 @@ import {
     Tooltip,
     Snackbar,
     Alert,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
 } from "@mui/material";
 
 import CloseIcon from "@mui/icons-material/Close";
@@ -78,6 +83,13 @@ export default function SeferDetayDrawer({
     const [savedOpen, setSavedOpen] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
 
+    const [scanOpen, setScanOpen] = React.useState(false);
+    const [scanError, setScanError] = React.useState("");
+    const [scanLoading, setScanLoading] = React.useState(false);
+
+    const qrRef = React.useRef(null);
+    const qrRegionId = "irsaliye-qr-reader";
+
     const selectFieldSx = (clickable) => ({
         "& .MuiOutlinedInput-root": {
             borderRadius: 2.2,
@@ -98,6 +110,115 @@ export default function SeferDetayDrawer({
             color: "rgba(255,255,255,0.75)",
         },
     });
+
+    const extractIrsaliyeNo = React.useCallback((rawText) => {
+        const text = String(rawText ?? "").trim();
+
+        const patterns = [
+            /"no"\s*\.\s*"([^"]+)"/i,
+            /\bno\b\s*\.\s*"([^"]+)"/i,
+            /\bno\b\s*[:=]\s*"?(.*?)"?(?:[,}\s]|$)/i,
+            /\bno\b\s+"([^"]+)"/i,
+            /\bno\b\s+([A-Za-z0-9\-_/]+)/i,
+        ];
+
+        for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match?.[1]) {
+                return String(match[1]).trim();
+            }
+        }
+
+        return "";
+    }, []);
+
+    const stopScanner = React.useCallback(async () => {
+        try {
+            if (qrRef.current) {
+                try {
+                    await qrRef.current.stop();
+                } catch (_) {
+                    // scanner durmuş olabilir
+                }
+
+                try {
+                    await qrRef.current.clear();
+                } catch (_) {
+                    // clear hatası önemli değil
+                }
+
+                qrRef.current = null;
+            }
+        } catch (e) {
+            console.error("QR stop error:", e);
+        }
+    }, []);
+
+    const closeScanner = React.useCallback(async () => {
+        await stopScanner();
+        setScanOpen(false);
+        setScanLoading(false);
+        setScanError("");
+    }, [stopScanner]);
+
+    const startScanner = React.useCallback(async () => {
+        if (!row?.id || !canEdit) return;
+
+        setScanError("");
+        setScanLoading(true);
+        setScanOpen(true);
+
+        setTimeout(async () => {
+            try {
+                const cameras = await Html5Qrcode.getCameras();
+
+                if (!cameras || cameras.length === 0) {
+                    setScanError("Kamera bulunamadı.");
+                    setScanLoading(false);
+                    return;
+                }
+
+                const cameraId = cameras[0].id;
+                const qr = new Html5Qrcode(qrRegionId);
+                qrRef.current = qr;
+
+                await qr.start(
+                    cameraId,
+                    {
+                        fps: 10,
+                        qrbox: { width: 260, height: 260 },
+                    },
+                    async (decodedText) => {
+                        const irsaliyeNo = extractIrsaliyeNo(decodedText);
+
+                        if (!irsaliyeNo) {
+                            setScanError('QR içinde "no" alanı bulunamadı.');
+                            return;
+                        }
+
+                        handleChange(row.id, "irsaliye", irsaliyeNo);
+                        setSavedOpen(true);
+                        await closeScanner();
+                    },
+                    () => {
+                        // sürekli hata basmamak için boş bırakıldı
+                    }
+                );
+
+                setScanLoading(false);
+            } catch (e) {
+                console.error("QR start error:", e);
+                setScanError(e?.message || "Kamera başlatılamadı.");
+                setScanLoading(false);
+            }
+        }, 150);
+    }, [row, canEdit, extractIrsaliyeNo, handleChange, closeScanner]);
+
+    React.useEffect(() => {
+        return () => {
+            stopScanner();
+        };
+    }, [stopScanner]);
 
     const handleSave = async () => {
         if (!row) return;
@@ -571,17 +692,45 @@ export default function SeferDetayDrawer({
                                         gap: 1.4,
                                     }}
                                 >
-                                    <TextField
-                                        fullWidth
-                                        label="İrsaliye"
-                                        value={row.irsaliye ?? ""}
-                                        onChange={(e) => handleChange(row.id, "irsaliye", e.target.value)}
-                                        size="small"
-                                        variant="outlined"
-                                        InputLabelProps={{ shrink: true }}
-                                        sx={selectFieldSx(false)}
-                                        disabled={!canEdit}
-                                    />
+                                    <Box
+                                        sx={{
+                                            display: "grid",
+                                            gridTemplateColumns: "1fr auto",
+                                            gap: 1,
+                                            alignItems: "start",
+                                            gridColumn: { xs: "1 / -1", sm: "auto" },
+                                        }}
+                                    >
+                                        <TextField
+                                            fullWidth
+                                            label="İrsaliye"
+                                            value={row.irsaliye ?? ""}
+                                            onChange={(e) => handleChange(row.id, "irsaliye", e.target.value)}
+                                            size="small"
+                                            variant="outlined"
+                                            InputLabelProps={{ shrink: true }}
+                                            sx={selectFieldSx(false)}
+                                            disabled={!canEdit}
+                                        />
+
+                                        <Button
+                                            variant="outlined"
+                                            onClick={startScanner}
+                                            disabled={!canEdit}
+                                            sx={{
+                                                minWidth: 120,
+                                                height: 40,
+                                                borderRadius: 2.2,
+                                                textTransform: "none",
+                                                fontWeight: 700,
+                                                borderColor: "rgba(255,255,255,0.22)",
+                                                color: "rgba(255,255,255,0.90)",
+                                                "&:hover": { borderColor: "rgba(255,255,255,0.35)" },
+                                            }}
+                                        >
+                                            İrsaliye Okut
+                                        </Button>
+                                    </Box>
 
                                     <TextField
                                         fullWidth
@@ -683,6 +832,67 @@ export default function SeferDetayDrawer({
                     </Button>
                 </Stack>
             </Box>
+
+            <Dialog
+                open={scanOpen}
+                onClose={closeScanner}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        background: "rgba(15,23,42,0.98)",
+                        color: "#fff",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                    },
+                }}
+            >
+                <DialogTitle sx={{ fontWeight: 800 }}>
+                    İrsaliye QR Okut
+                </DialogTitle>
+
+                <DialogContent>
+                    <Typography sx={{ fontSize: 13, color: "rgba(255,255,255,0.68)", mb: 1.5 }}>
+                        Kamerayı QR koda tutun. QR içindeki <b>no</b> değeri otomatik olarak irsaliye alanına yazılır.
+                    </Typography>
+
+                    <Box
+                        id={qrRegionId}
+                        sx={{
+                            width: "100%",
+                            minHeight: 320,
+                            borderRadius: 2,
+                            overflow: "hidden",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.10)",
+                        }}
+                    />
+
+                    {scanLoading ? (
+                        <Typography sx={{ mt: 1.2, fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
+                            Kamera açılıyor...
+                        </Typography>
+                    ) : null}
+
+                    {scanError ? (
+                        <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }}>
+                            {scanError}
+                        </Alert>
+                    ) : null}
+                </DialogContent>
+
+                <DialogActions sx={{ px: 3, pb: 2.5 }}>
+                    <Button
+                        onClick={closeScanner}
+                        sx={{
+                            color: "rgba(255,255,255,0.78)",
+                            borderRadius: 2,
+                        }}
+                    >
+                        Kapat
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <Snackbar
                 open={savedOpen}
