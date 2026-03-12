@@ -1,6 +1,6 @@
 ﻿// src/plakaAtama/SeferDetayDrawer.js
 import React from "react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import Tesseract from "tesseract.js";
 import {
     Drawer,
     Box,
@@ -88,9 +88,8 @@ export default function SeferDetayDrawer({
     const [scanError, setScanError] = React.useState("");
     const [scanLoading, setScanLoading] = React.useState(false);
 
-    const qrRef = React.useRef(null);
-    const qrStartingRef = React.useRef(false);
-    const qrRegionId = "irsaliye-qr-reader";
+    const videoRef = React.useRef(null);
+    const streamRef = React.useRef(null);
 
     const selectFieldSx = (clickable) => ({
         "& .MuiOutlinedInput-root": {
@@ -113,147 +112,168 @@ export default function SeferDetayDrawer({
         },
     });
 
-    const extractIrsaliyeNo = React.useCallback((rawText) => {
-        const text = String(rawText ?? "").trim();
-        console.log("RAW QR TEXT:", text);
+    const stopCamera = React.useCallback(() => {
+        try {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop());
+                streamRef.current = null;
+            }
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = null;
+            }
+        } catch (e) {
+            console.error("Camera stop error:", e);
+        }
+    }, []);
+
+    const closeScanner = React.useCallback(() => {
+        stopCamera();
+        setScanOpen(false);
+        setScanLoading(false);
+        setScanError("");
+    }, [stopCamera]);
+
+    const startScanner = React.useCallback(async () => {
+        if (!row?.id || !canEdit) return;
 
         try {
-            const parsed = JSON.parse(text);
-            if (parsed?.no) {
-                return String(parsed.no).trim();
-            }
-        } catch (_) {
-            // json değilse fallback
-        }
+            setScanError("");
+            setScanLoading(true);
+            setScanOpen(true);
 
-        const match = text.match(/\b(BE[0-9A-Z]+)\b/i);
-        if (match?.[1]) {
-            return match[1].trim();
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: "environment" },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                },
+                audio: false,
+            });
+
+            streamRef.current = stream;
+
+            setTimeout(async () => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    try {
+                        await videoRef.current.play();
+                    } catch (err) {
+                        console.error("Video play error:", err);
+                    }
+                }
+                setScanLoading(false);
+            }, 200);
+        } catch (e) {
+            console.error("Camera start error:", e);
+            setScanError(e?.message || "Kamera başlatılamadı.");
+            setScanLoading(false);
+        }
+    }, [row, canEdit]);
+
+    React.useEffect(() => {
+        return () => {
+            stopCamera();
+        };
+    }, [stopCamera]);
+
+    const captureFrame = React.useCallback(() => {
+        const video = videoRef.current;
+        if (!video || !video.videoWidth || !video.videoHeight) return null;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        return canvas;
+    }, []);
+
+    const cropTableArea = React.useCallback((sourceCanvas) => {
+        const sw = sourceCanvas.width;
+        const sh = sourceCanvas.height;
+
+        // Belgenin alt yarı/orta bölgesine odaklanır
+        const sx = sw * 0.06;
+        const sy = sh * 0.42;
+        const sWidth = sw * 0.88;
+        const sHeight = sh * 0.46;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = sWidth;
+        canvas.height = sHeight;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(sourceCanvas, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+
+        return canvas;
+    }, []);
+
+    const extractIrsaliyeNoFromText = React.useCallback((rawText) => {
+        const text = String(rawText || "")
+            .replace(/İ/g, "I")
+            .replace(/ı/g, "i")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        console.log("OCR TEXT:", text);
+
+        const patterns = [
+            /Irsaliye\s*No\s*[:\-]?\s*(BE[0-9A-Z]+)/i,
+            /IRSALIYE\s*NO\s*[:\-]?\s*(BE[0-9A-Z]+)/i,
+            /\b(BE[0-9A-Z]{8,})\b/i,
+        ];
+
+        for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match?.[1]) {
+                return match[1].trim();
+            }
         }
 
         return "";
     }, []);
 
-    const stopScanner = React.useCallback(async () => {
-        try {
-            if (qrRef.current) {
-                try {
-                    await qrRef.current.stop();
-                } catch (_) { }
-
-                try {
-                    await qrRef.current.clear();
-                } catch (_) { }
-
-                qrRef.current = null;
-            }
-        } catch (e) {
-            console.error("QR stop error:", e);
-        } finally {
-            qrStartingRef.current = false;
-        }
-    }, []);
-
-    const closeScanner = React.useCallback(async () => {
-        await stopScanner();
-        setScanOpen(false);
-        setScanLoading(false);
-        setScanError("");
-    }, [stopScanner]);
-
-    const startScanner = React.useCallback(async () => {
+    const handleReadTable = React.useCallback(async () => {
         if (!row?.id || !canEdit) return;
-        if (qrStartingRef.current || qrRef.current) return;
 
-        qrStartingRef.current = true;
-        setScanError("");
-        setScanLoading(true);
-        setScanOpen(true);
+        try {
+            setScanLoading(true);
+            setScanError("");
 
-        setTimeout(async () => {
-            try {
-                const qrContainer = document.getElementById(qrRegionId);
-                if (!qrContainer) {
-                    setScanError("QR alanı hazırlanamadı.");
-                    setScanLoading(false);
-                    qrStartingRef.current = false;
-                    return;
-                }
-
-                const cameras = await Html5Qrcode.getCameras();
-
-                if (!cameras || cameras.length === 0) {
-                    setScanError("Kamera bulunamadı.");
-                    setScanLoading(false);
-                    qrStartingRef.current = false;
-                    return;
-                }
-
-                const backCamera =
-                    cameras.find((cam) => /back|rear|environment/gi.test(cam.label || "")) ||
-                    cameras[cameras.length - 1] ||
-                    cameras[0];
-
-                const qr = new Html5Qrcode(qrRegionId, {
-                    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-                    verbose: true,
-                });
-
-                qrRef.current = qr;
-
-                await qr.start(
-                    backCamera.id,
-                    {
-                        fps: 8,
-                        aspectRatio: 1.0,
-                        disableFlip: false,
-                        experimentalFeatures: {
-                            useBarCodeDetectorIfSupported: true,
-                        },
-                    },
-                    async (decodedText) => {
-                        try {
-                            console.log("QR OKUNDU:", decodedText);
-
-                            const irsaliyeNo = extractIrsaliyeNo(decodedText);
-                            console.log("AYIKLANAN IRSALIYE:", irsaliyeNo);
-
-                            if (!irsaliyeNo) {
-                                setScanError(
-                                    `QR okundu ama "no" alanı alınamadı. Veri: ${decodedText}`
-                                );
-                                return;
-                            }
-
-                            handleChange(row.id, "irsaliye", irsaliyeNo);
-                            setSavedOpen(true);
-                            await closeScanner();
-                        } catch (err) {
-                            console.error("QR decode handling error:", err);
-                            setScanError("QR verisi işlenemedi.");
-                        }
-                    },
-                    (errorMessage) => {
-                        console.log("QR scan hata:", errorMessage);
-                    }
-                );
-
+            const fullCanvas = captureFrame();
+            if (!fullCanvas) {
+                setScanError("Kamera görüntüsü alınamadı.");
                 setScanLoading(false);
-                qrStartingRef.current = false;
-            } catch (e) {
-                console.error("QR start error:", e);
-                setScanError(e?.message || "Kamera başlatılamadı.");
-                setScanLoading(false);
-                qrStartingRef.current = false;
+                return;
             }
-        }, 400);
-    }, [row, canEdit, extractIrsaliyeNo, handleChange, closeScanner]);
 
-    React.useEffect(() => {
-        return () => {
-            stopScanner();
-        };
-    }, [stopScanner]);
+            const tableCanvas = cropTableArea(fullCanvas);
+
+            const result = await Tesseract.recognize(tableCanvas, "tur+eng", {
+                logger: (m) => console.log(m),
+            });
+
+            const text = result?.data?.text || "";
+            const irsaliyeNo = extractIrsaliyeNoFromText(text);
+
+            if (!irsaliyeNo) {
+                setScanError("Tabloda İrsaliye No bulunamadı.");
+                setScanLoading(false);
+                return;
+            }
+
+            handleChange(row.id, "irsaliye", irsaliyeNo);
+            setSavedOpen(true);
+            closeScanner();
+        } catch (err) {
+            console.error("OCR read error:", err);
+            setScanError("Tablo okunamadı.");
+            setScanLoading(false);
+        }
+    }, [row, canEdit, captureFrame, cropTableArea, extractIrsaliyeNoFromText, handleChange, closeScanner]);
 
     const handleSave = async () => {
         if (!row || !canEdit) return;
@@ -732,7 +752,7 @@ export default function SeferDetayDrawer({
                                                 "&:hover": { borderColor: "rgba(255,255,255,0.35)" },
                                             }}
                                         >
-                                            {scanLoading ? "Açılıyor..." : "İrsaliye Okut"}
+                                            {scanLoading ? "Açılıyor..." : "Tablodan Oku"}
                                         </Button>
                                     </Box>
 
@@ -850,20 +870,19 @@ export default function SeferDetayDrawer({
                 }}
             >
                 <DialogTitle sx={{ fontWeight: 800 }}>
-                    İrsaliye QR Okut
+                    İrsaliye Tablodan Oku
                 </DialogTitle>
 
                 <DialogContent>
                     <Typography sx={{ fontSize: 13, color: "rgba(255,255,255,0.68)", mb: 1.5 }}>
-                        Kamerayı QR koda tutun. QR içindeki <b>no</b> değeri otomatik olarak irsaliye alanına yazılır.
+                        Belgenin alt tarafındaki tabloyu kameraya gösterin. Sistem <b>İrsaliye No</b> alanını okuyup otomatik doldurur.
                     </Typography>
 
                     <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.60)", mb: 1.5 }}>
-                        Belgeyi düz zemine koyun, iyi ışık verin, çok yaklaştırmayın. QR kodun tamamı tek seferde görünmeli.
+                        Belgeyi düz zemine koyun, iyi ışık verin ve tabloyu mümkün olduğunca ekranın alt-orta bölümüne getirin.
                     </Typography>
 
                     <Box
-                        id={qrRegionId}
                         sx={{
                             width: "100%",
                             minHeight: 360,
@@ -871,12 +890,40 @@ export default function SeferDetayDrawer({
                             overflow: "hidden",
                             background: "rgba(255,255,255,0.04)",
                             border: "1px solid rgba(255,255,255,0.10)",
+                            position: "relative",
                         }}
-                    />
+                    >
+                        <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            style={{
+                                width: "100%",
+                                height: "360px",
+                                objectFit: "cover",
+                                display: "block",
+                            }}
+                        />
+
+                        <Box
+                            sx={{
+                                position: "absolute",
+                                left: "8%",
+                                top: "42%",
+                                width: "84%",
+                                height: "46%",
+                                border: "2px dashed rgba(120,160,255,0.9)",
+                                borderRadius: 2,
+                                pointerEvents: "none",
+                                boxShadow: "inset 0 0 0 9999px rgba(0,0,0,0.08)",
+                            }}
+                        />
+                    </Box>
 
                     {scanLoading ? (
                         <Typography sx={{ mt: 1.2, fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
-                            Kamera açılıyor...
+                            {videoRef.current?.srcObject ? "Tablo okunuyor..." : "Kamera açılıyor..."}
                         </Typography>
                     ) : null}
 
@@ -896,6 +943,19 @@ export default function SeferDetayDrawer({
                         }}
                     >
                         Kapat
+                    </Button>
+
+                    <Button
+                        variant="contained"
+                        onClick={handleReadTable}
+                        disabled={scanLoading || !canEdit}
+                        sx={{
+                            borderRadius: 2,
+                            textTransform: "none",
+                            fontWeight: 700,
+                        }}
+                    >
+                        {scanLoading ? "Okunuyor..." : "Tabloyu Tara"}
                     </Button>
                 </DialogActions>
             </Dialog>
