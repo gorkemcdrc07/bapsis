@@ -123,22 +123,12 @@ export default function SeferDetayDrawer({
                 return String(parsed.no).trim();
             }
         } catch (_) {
-            // JSON değilse fallback
+            // json değilse fallback
         }
 
-        const patterns = [
-            /"no"\s*:\s*"([^"]+)"/i,
-            /'no'\s*:\s*'([^']+)'/i,
-            /\bno\b\s*[:=]\s*"([^"]+)"/i,
-            /\bno\b\s*[:=]\s*'([^']+)'/i,
-            /\bno\b\s*[:=]\s*([A-Z0-9]+)/i,
-            /\b(BE[0-9A-Z]+)\b/i,
-        ];
-
-        for (const pattern of patterns) {
-            const match = text.match(pattern);
-            if (match?.[1]) return String(match[1]).trim();
-            if (match?.[0]?.startsWith("BE")) return String(match[0]).trim();
+        const match = text.match(/\b(BE[0-9A-Z]+)\b/i);
+        if (match?.[1]) {
+            return match[1].trim();
         }
 
         return "";
@@ -206,23 +196,19 @@ export default function SeferDetayDrawer({
 
                 const qr = new Html5Qrcode(qrRegionId, {
                     formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-                    verbose: false,
+                    verbose: true,
                 });
 
                 qrRef.current = qr;
 
                 await qr.start(
-                    { deviceId: { exact: backCamera.id } },
+                    backCamera.id,
                     {
-                        fps: 12,
-                        qrbox: { width: 320, height: 320 },
+                        fps: 8,
                         aspectRatio: 1.0,
                         disableFlip: false,
-                        videoConstraints: {
-                            deviceId: { exact: backCamera.id },
-                            facingMode: "environment",
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 },
+                        experimentalFeatures: {
+                            useBarCodeDetectorIfSupported: true,
                         },
                     },
                     async (decodedText) => {
@@ -234,7 +220,7 @@ export default function SeferDetayDrawer({
 
                             if (!irsaliyeNo) {
                                 setScanError(
-                                    `QR içinde "no" alanı bulunamadı. Okunan veri: ${decodedText}`
+                                    `QR okundu ama "no" alanı alınamadı. Veri: ${decodedText}`
                                 );
                                 return;
                             }
@@ -247,8 +233,8 @@ export default function SeferDetayDrawer({
                             setScanError("QR verisi işlenemedi.");
                         }
                     },
-                    () => {
-                        // decode başarısız callback'i sessiz bırakıldı
+                    (errorMessage) => {
+                        console.log("QR scan hata:", errorMessage);
                     }
                 );
 
@@ -260,7 +246,7 @@ export default function SeferDetayDrawer({
                 setScanLoading(false);
                 qrStartingRef.current = false;
             }
-        }, 350);
+        }, 400);
     }, [row, canEdit, extractIrsaliyeNo, handleChange, closeScanner]);
 
     React.useEffect(() => {
@@ -873,7 +859,7 @@ export default function SeferDetayDrawer({
                     </Typography>
 
                     <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.60)", mb: 1.5 }}>
-                        Belgeyi düz zemine koyun, iyi ışık verin, çok yaklaştırmayın. QR ekranın ortasında ve net görünmeli.
+                        Belgeyi düz zemine koyun, iyi ışık verin, çok yaklaştırmayın. QR kodun tamamı tek seferde görünmeli.
                     </Typography>
 
                     <Box
