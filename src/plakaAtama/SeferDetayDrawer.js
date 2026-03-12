@@ -115,31 +115,34 @@ export default function SeferDetayDrawer({
     const extractIrsaliyeNo = React.useCallback((rawText) => {
         const text = String(rawText ?? "").trim();
 
+        console.log("RAW QR TEXT:", text);
+
         try {
             const parsed = JSON.parse(text);
             if (parsed?.no) {
                 return String(parsed.no).trim();
             }
         } catch (_) {
-            // JSON parse olmazsa regex ile devam
+            // JSON değilse regex ile devam
         }
 
         const patterns = [
             /"no"\s*:\s*"([^"]+)"/i,
+            /'no'\s*:\s*'([^']+)'/i,
             /\bno\b\s*[:=]\s*"([^"]+)"/i,
-            /\bno\b\s*[:=]\s*([A-Za-z0-9\-_/]+)/i,
+            /\bno\b\s*[:=]\s*'([^']+)'/i,
+            /\bno\b\s*[:=]\s*([A-Z0-9]+)/i,
+            /\bBE[0-9A-Z]+\b/i,
         ];
 
         for (const pattern of patterns) {
             const match = text.match(pattern);
-            if (match?.[1]) {
-                return String(match[1]).trim();
-            }
+            if (match?.[1]) return String(match[1]).trim();
+            if (match?.[0]) return String(match[0]).trim();
         }
 
         return "";
     }, []);
-
     const stopScanner = React.useCallback(async () => {
         try {
             if (qrRef.current) {
@@ -216,13 +219,14 @@ export default function SeferDetayDrawer({
                     },
                     async (decodedText) => {
                         try {
+                            console.log("QR OKUNDU:", decodedText);
+
                             const irsaliyeNo = extractIrsaliyeNo(decodedText);
 
-                            console.log("QR OKUNDU:", decodedText);
-                            console.log("İRSALİYE NO:", irsaliyeNo);
+                            console.log("AYIKLANAN IRSALIYE:", irsaliyeNo);
 
                             if (!irsaliyeNo) {
-                                setScanError('QR içinde "no" alanı bulunamadı.');
+                                setScanError(`QR içinde "no" alanı bulunamadı. Okunan veri: ${decodedText}`);
                                 return;
                             }
 
@@ -238,7 +242,6 @@ export default function SeferDetayDrawer({
                         // sürekli hata göstermemek için boş bırakıldı
                     }
                 );
-
                 setScanLoading(false);
                 qrStartingRef.current = false;
             } catch (e) {
