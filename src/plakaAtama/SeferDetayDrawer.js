@@ -33,7 +33,8 @@ const Section = ({ title, subtitle, icon, children, sx }) => (
             p: 2,
             borderRadius: 3,
             border: "1px solid rgba(255,255,255,0.10)",
-            background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
+            background:
+                "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
             backdropFilter: "blur(10px)",
             boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
             ...sx,
@@ -114,37 +115,30 @@ export default function SeferDetayDrawer({
 
     const extractIrsaliyeNo = React.useCallback((rawText) => {
         const text = String(rawText ?? "").trim();
-
         console.log("RAW QR TEXT:", text);
 
-        // 1) Önce direkt JSON parse dene
         try {
             const parsed = JSON.parse(text);
             if (parsed?.no) {
                 return String(parsed.no).trim();
             }
         } catch (_) {
-            // json değilse fallback
+            // JSON değilse fallback
         }
 
-        // 2) Regex fallback
         const patterns = [
             /"no"\s*:\s*"([^"]+)"/i,
             /'no'\s*:\s*'([^']+)'/i,
             /\bno\b\s*[:=]\s*"([^"]+)"/i,
             /\bno\b\s*[:=]\s*'([^']+)'/i,
             /\bno\b\s*[:=]\s*([A-Z0-9]+)/i,
-            /\bBE[0-9A-Z]+\b/i,
+            /\b(BE[0-9A-Z]+)\b/i,
         ];
 
         for (const pattern of patterns) {
             const match = text.match(pattern);
-            if (match?.[1]) {
-                return String(match[1]).trim();
-            }
-            if (match?.[0]?.startsWith("BE")) {
-                return String(match[0]).trim();
-            }
+            if (match?.[1]) return String(match[1]).trim();
+            if (match?.[0]?.startsWith("BE")) return String(match[0]).trim();
         }
 
         return "";
@@ -210,27 +204,38 @@ export default function SeferDetayDrawer({
                     cameras[cameras.length - 1] ||
                     cameras[0];
 
-                const qr = new Html5Qrcode(qrRegionId);
+                const qr = new Html5Qrcode(qrRegionId, {
+                    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                    verbose: false,
+                });
+
                 qrRef.current = qr;
 
                 await qr.start(
-                    backCamera.id,
+                    { deviceId: { exact: backCamera.id } },
                     {
-                        fps: 10,
-                        qrbox: { width: 260, height: 260 },
+                        fps: 12,
+                        qrbox: { width: 320, height: 320 },
                         aspectRatio: 1.0,
-                        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                        disableFlip: false,
+                        videoConstraints: {
+                            deviceId: { exact: backCamera.id },
+                            facingMode: "environment",
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 },
+                        },
                     },
                     async (decodedText) => {
                         try {
                             console.log("QR OKUNDU:", decodedText);
 
                             const irsaliyeNo = extractIrsaliyeNo(decodedText);
-
                             console.log("AYIKLANAN IRSALIYE:", irsaliyeNo);
 
                             if (!irsaliyeNo) {
-                                setScanError(`QR içinde "no" alanı bulunamadı. Okunan veri: ${decodedText}`);
+                                setScanError(
+                                    `QR içinde "no" alanı bulunamadı. Okunan veri: ${decodedText}`
+                                );
                                 return;
                             }
 
@@ -243,7 +248,7 @@ export default function SeferDetayDrawer({
                         }
                     },
                     () => {
-                        // sürekli hata göstermemek için boş bırakıldı
+                        // decode başarısız callback'i sessiz bırakıldı
                     }
                 );
 
@@ -255,7 +260,7 @@ export default function SeferDetayDrawer({
                 setScanLoading(false);
                 qrStartingRef.current = false;
             }
-        }, 300);
+        }, 350);
     }, [row, canEdit, extractIrsaliyeNo, handleChange, closeScanner]);
 
     React.useEffect(() => {
@@ -265,8 +270,7 @@ export default function SeferDetayDrawer({
     }, [stopScanner]);
 
     const handleSave = async () => {
-        if (!row) return;
-        if (!canEdit) return;
+        if (!row || !canEdit) return;
 
         try {
             setSaving(true);
@@ -496,21 +500,9 @@ export default function SeferDetayDrawer({
                                     </Typography>
 
                                     <Stack direction="row" spacing={1} sx={{ mt: 1.2, flexWrap: "wrap", rowGap: 1 }}>
-                                        <Chip
-                                            size="small"
-                                            label={`Çekici: ${row.cekici || "-"}`}
-                                            sx={{ borderRadius: 999 }}
-                                        />
-                                        <Chip
-                                            size="small"
-                                            label={`Dorse: ${row.dorse || "-"}`}
-                                            sx={{ borderRadius: 999 }}
-                                        />
-                                        <Chip
-                                            size="small"
-                                            label={`TC: ${row.tc || "-"}`}
-                                            sx={{ borderRadius: 999 }}
-                                        />
+                                        <Chip size="small" label={`Çekici: ${row.cekici || "-"}`} sx={{ borderRadius: 999 }} />
+                                        <Chip size="small" label={`Dorse: ${row.dorse || "-"}`} sx={{ borderRadius: 999 }} />
+                                        <Chip size="small" label={`TC: ${row.tc || "-"}`} sx={{ borderRadius: 999 }} />
                                     </Stack>
                                 </Box>
 
@@ -567,9 +559,7 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: (
-                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
-                                            ),
+                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
                                         }}
                                         onClick={(e) => openLb(e, row.id, "cekici")}
                                         sx={selectFieldSx(canEdit)}
@@ -585,9 +575,7 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: (
-                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
-                                            ),
+                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
                                         }}
                                         onClick={(e) => openLb(e, row.id, "dorse")}
                                         sx={selectFieldSx(canEdit)}
@@ -603,9 +591,7 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: (
-                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
-                                            ),
+                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
                                         }}
                                         onClick={(e) => openLb(e, row.id, "surucu")}
                                         sx={selectFieldSx(canEdit)}
@@ -621,9 +607,7 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: (
-                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
-                                            ),
+                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
                                         }}
                                         onClick={(e) => openLb(e, row.id, "tel")}
                                         sx={selectFieldSx(canEdit)}
@@ -639,9 +623,7 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: (
-                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
-                                            ),
+                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
                                         }}
                                         onClick={(e) => openLb(e, row.id, "tc")}
                                         sx={selectFieldSx(canEdit)}
@@ -657,9 +639,7 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: (
-                                                <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />
-                                            ),
+                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
                                         }}
                                         onClick={(e) => openLb(e, row.id, "vkn")}
                                         sx={selectFieldSx(canEdit)}
@@ -756,7 +736,7 @@ export default function SeferDetayDrawer({
                                             onClick={startScanner}
                                             disabled={!canEdit || scanLoading}
                                             sx={{
-                                                minWidth: 120,
+                                                minWidth: 130,
                                                 height: 40,
                                                 borderRadius: 2.2,
                                                 textTransform: "none",
@@ -893,14 +873,14 @@ export default function SeferDetayDrawer({
                     </Typography>
 
                     <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.60)", mb: 1.5 }}>
-                        Kare QR kodu okutun. Belgede başka barkod veya kodlar varsa sistem onları da algılayabilir.
+                        Belgeyi düz zemine koyun, iyi ışık verin, çok yaklaştırmayın. QR ekranın ortasında ve net görünmeli.
                     </Typography>
 
                     <Box
                         id={qrRegionId}
                         sx={{
                             width: "100%",
-                            minHeight: 320,
+                            minHeight: 360,
                             borderRadius: 2,
                             overflow: "hidden",
                             background: "rgba(255,255,255,0.04)",
