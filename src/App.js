@@ -50,10 +50,7 @@ function Yetkisiz({ onGoHome }) {
 }
 
 export default function App() {
-    // ✅ session yok: runtime state
     const [oturum, setOturum] = useState(null);
-
-    // ✅ izinler
     const [allowedScreens, setAllowedScreens] = useState(new Set());
     const [allowedButtons, setAllowedButtons] = useState(new Set());
 
@@ -93,7 +90,6 @@ export default function App() {
     }
 
     const fetchPermissions = useCallback(async (userId) => {
-        // ekran izinleri
         const { data: ekranRows, error: e1 } = await supabase
             .from("v_kullanici_ekran_izinleri")
             .select("ekran_kod, izin")
@@ -104,16 +100,13 @@ export default function App() {
 
         const screens = new Set((ekranRows || []).map((r) => r.ekran_kod));
 
-        // buton izinleri (buton seed yoksa boş dönebilir; sorun değil)
         const { data: butonRows, error: e2 } = await supabase
             .from("v_kullanici_buton_izinleri")
             .select("ekran_kod, buton_kod, izin")
             .eq("kullanici_id", userId)
             .eq("izin", true);
 
-        // view yoksa veya tablo boşsa app patlamasın:
         if (e2) {
-            // İstersen burada console.warn bırak
             return { screens, buttons: new Set() };
         }
 
@@ -133,9 +126,7 @@ export default function App() {
                 setAllowedScreens(perms.screens);
                 setAllowedButtons(perms.buttons);
 
-                // Kullanıcının ilk açabileceği sayfaya düşür
                 if (!perms.screens.has("anasayfa")) {
-                    // anasayfa yoksa izinli ilk ekranı bul
                     const first = Array.from(perms.screens.values())[0];
                     setSayfa(first || "anasayfa");
                 } else {
@@ -143,7 +134,6 @@ export default function App() {
                 }
             } catch (err) {
                 console.error("Yetki çekme hatası:", err);
-                // Yetki çekilemezse güvenli davran: her şeyi kapat
                 setAllowedScreens(new Set());
                 setAllowedButtons(new Set());
                 setSayfa("anasayfa");
@@ -164,10 +154,8 @@ export default function App() {
         setSayfa(p);
     }, []);
 
-    // ✅ Oturum yoksa login
     if (!oturum) return <Login onGirisBasarili={onLoginSuccess} />;
 
-    // Sayfa bileşenleri
     const pageMap = {
         anasayfa: <Anasayfa kullanici={oturum} />,
 
@@ -200,29 +188,22 @@ export default function App() {
         ),
     };
 
-    // ✅ Ekran yetkisi kontrolü
     const isAllowed = (screenKod) => {
-        // izin set’i boşsa (henüz çekilemediyse) güvenli davran: kapat
         if (!allowedScreens || allowedScreens.size === 0) return false;
         return allowedScreens.has(screenKod);
     };
 
     const aktifSayfa = pageMap[sayfa] ? sayfa : "anasayfa";
 
-    // Eğer seçilen sayfaya yetkisi yoksa yetkisiz ekranı göster
-    // (İstersen otomatik anasayfaya da atabiliriz)
     const renderPage = () => {
         if (!isAllowed(aktifSayfa)) {
             return <Yetkisiz onGoHome={() => setSayfa("anasayfa")} />;
         }
 
-        // Admin açılacaksa ayrıca 'admin' ekran izni de gerekir
         if (aktifSayfa === "admin" && !isAllowed("admin")) {
             return <Yetkisiz onGoHome={() => setSayfa("anasayfa")} />;
         }
 
-        // Buton izinlerini sayfalara prop geçmek istersen:
-        // örn: <Anasayfa ... allowedButtons={allowedButtons} />
         return pageMap[aktifSayfa];
     };
 
@@ -235,7 +216,7 @@ export default function App() {
                 setOpen={setSidebarOpen}
                 selected={sayfa}
                 onSelect={handleSelectPage}
-                allowedScreens={allowedScreens} // ✅ Sidebar filtrelemesi için
+                allowedScreens={allowedScreens}
             />
 
             <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -243,7 +224,9 @@ export default function App() {
                     kullanici={oturum}
                     onCikis={cikisYap}
                     onSelect={handleSelectPage}
-                    allowedScreens={allowedScreens} // istersen navbar’da da kullanırsın
+                    allowedScreens={allowedScreens}
+                    sidebarOpen={sidebarOpen}
+                    onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
                 />
 
                 <Box component="main" sx={{ flexGrow: 1, overflow: "auto" }}>

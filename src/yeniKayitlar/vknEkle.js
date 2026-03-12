@@ -13,15 +13,18 @@ import {
     CircularProgress,
     Stack,
     Snackbar,
+    List,
+    ListItem,
+    ListItemText,
+    Avatar,
 } from "@mui/material";
 import {
     Save,
-    Badge,
-    DirectionsCar,
-    LocalShipping,
-    Person,
-    Phone,
     Numbers,
+    Search,
+    ContentPasteGo,
+    Shield,
+    Dataset,
 } from "@mui/icons-material";
 
 import { supabase } from "../supabase";
@@ -123,14 +126,6 @@ async function fetchButtonMaps({ supabase, ekranId, userId, roleId }) {
 function initialForm() {
     return {
         vkn: "",
-        cekici: "",
-        dorse: "",
-        ad_soyad: "",
-        tc_no: "",
-        telefon: "",
-        istasyon: "",
-        statu: "aktif",
-        notlar: "",
     };
 }
 
@@ -142,6 +137,19 @@ export default function VknEkle({ kullanici }) {
         btn: {},
     });
 
+    const [snack, setSnack] = useState({ open: false, msg: "", sev: "info" });
+    const [form, setForm] = useState(initialForm());
+    const [loading, setLoading] = useState(false);
+    const [hata, setHata] = useState("");
+    const [basari, setBasari] = useState("");
+
+    const [vknList, setVknList] = useState([]);
+    const [listLoading, setListLoading] = useState(false);
+    const [search, setSearch] = useState("");
+
+    const showSnack = useCallback((msg, sev = "info") => setSnack({ open: true, msg, sev }), []);
+    const closeSnack = useCallback(() => setSnack((p) => ({ ...p, open: false })), []);
+
     const can = useCallback(
         (btnKod) => {
             if (!perm.ekranGorunur) return false;
@@ -149,6 +157,39 @@ export default function VknEkle({ kullanici }) {
         },
         [perm]
     );
+
+    const updatedByName = useMemo(() => {
+        return kullanici?.kullanici || kullanici?.ad || kullanici?.mail?.split("@")?.[0] || "";
+    }, [kullanici]);
+
+    const filteredList = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return vknList;
+        return vknList.filter((x) => String(x).toLowerCase().includes(q));
+    }, [search, vknList]);
+
+    const loadVknList = useCallback(async () => {
+        try {
+            setListLoading(true);
+
+            const { data, error } = await supabase
+                .from("plakalar")
+                .select("vkn")
+                .not("vkn", "is", null)
+                .order("vkn", { ascending: true });
+
+            if (error) throw error;
+
+            const uniqueList = [...new Set((data || []).map((x) => String(x.vkn || "").trim()).filter(Boolean))];
+
+            setVknList(uniqueList);
+        } catch (e) {
+            console.error("VKN list load error:", e);
+            setVknList([]);
+        } finally {
+            setListLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
         let alive = true;
@@ -162,9 +203,7 @@ export default function VknEkle({ kullanici }) {
                 const userId = lsUser?.id;
 
                 if (!userId) {
-                    if (alive) {
-                        setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
-                    }
+                    if (alive) setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
                     return;
                 }
 
@@ -178,17 +217,13 @@ export default function VknEkle({ kullanici }) {
 
                 const roleId = uRow?.rol_id;
                 if (!roleId) {
-                    if (alive) {
-                        setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
-                    }
+                    if (alive) setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
                     return;
                 }
 
                 const ekranId = await fetchEkranIdByKod({ supabase, ekranKod: EKRAN_KOD });
                 if (!ekranId) {
-                    if (alive) {
-                        setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
-                    }
+                    if (alive) setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
                     return;
                 }
 
@@ -215,9 +250,7 @@ export default function VknEkle({ kullanici }) {
                 }
             } catch (e) {
                 console.error("VknEkle permission load error:", e);
-                if (alive) {
-                    setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
-                }
+                if (alive) setPerm({ ekranGorunur: false, ekranYazma: false, btn: {} });
             } finally {
                 if (alive) setPermLoading(false);
             }
@@ -230,18 +263,11 @@ export default function VknEkle({ kullanici }) {
         };
     }, []);
 
-    const [snack, setSnack] = useState({ open: false, msg: "", sev: "info" });
-    const showSnack = useCallback((msg, sev = "info") => setSnack({ open: true, msg, sev }), []);
-    const closeSnack = useCallback(() => setSnack((p) => ({ ...p, open: false })), []);
-
-    const [form, setForm] = useState(initialForm());
-    const [loading, setLoading] = useState(false);
-    const [hata, setHata] = useState("");
-    const [basari, setBasari] = useState("");
-
-    const updatedByName = useMemo(() => {
-        return kullanici?.kullanici || kullanici?.ad || kullanici?.mail?.split("@")?.[0] || "";
-    }, [kullanici]);
+    useEffect(() => {
+        if (perm.ekranGorunur) {
+            loadVknList();
+        }
+    }, [perm.ekranGorunur, loadVknList]);
 
     const onChange = (key) => (e) => {
         if (!perm.ekranYazma) return;
@@ -279,23 +305,17 @@ export default function VknEkle({ kullanici }) {
         try {
             const payload = {
                 vkn: form.vkn.trim(),
-                cekici: form.cekici.trim() || null,
-                dorse: form.dorse.trim() || null,
-                ad_soyad: form.ad_soyad.trim() || null,
-                tc_no: form.tc_no.trim() || null,
-                telefon: form.telefon.trim() || null,
-                istasyon: form.istasyon.trim() || null,
-                statu: form.statu.trim() || null,
-                notlar: form.notlar.trim() || null,
             };
 
             const { error } = await supabase.from("plakalar").insert([payload]);
             if (error) throw error;
 
-            setBasari("Kayıt başarıyla eklendi.");
-            showSnack("Kayıt eklendi.", "success");
+            setBasari("VKN başarıyla eklendi.");
+            showSnack("VKN eklendi.", "success");
             setForm(initialForm());
             setHata("");
+
+            await loadVknList();
         } catch (e) {
             const msg = e?.message || "Kayıt sırasında hata oluştu.";
             setHata(msg);
@@ -307,20 +327,10 @@ export default function VknEkle({ kullanici }) {
 
     if (permLoading) {
         return (
-            <Box sx={{ p: { xs: 2, md: 4 } }}>
-                <Box sx={{ maxWidth: 980, mx: "auto" }}>
-                    <Paper
-                        elevation={0}
-                        sx={{
-                            p: 4,
-                            borderRadius: "24px",
-                            bgcolor: "rgba(15, 23, 42, 0.55)",
-                            border: "1px solid rgba(255,255,255,0.06)",
-                            backdropFilter: "blur(18px)",
-                            boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
-                        }}
-                    >
-                        <Stack spacing={1.2} alignItems="center" justifyContent="center" sx={{ py: 6 }}>
+            <Box sx={pageSx}>
+                <Box sx={containerSx}>
+                    <Paper sx={loadingCardSx}>
+                        <Stack spacing={1.4} alignItems="center" justifyContent="center" sx={{ py: 8 }}>
                             <CircularProgress />
                             <Typography sx={{ color: "rgba(255,255,255,0.75)", fontWeight: 800 }}>
                                 Yetkiler yükleniyor…
@@ -334,29 +344,29 @@ export default function VknEkle({ kullanici }) {
 
     if (!perm.ekranGorunur) {
         return (
-            <Box sx={{ p: { xs: 2, md: 4 } }}>
-                <Box sx={{ maxWidth: 980, mx: "auto" }}>
-                    <Paper
-                        elevation={0}
-                        sx={{
-                            p: 4,
-                            borderRadius: "24px",
-                            bgcolor: "rgba(15, 23, 42, 0.55)",
-                            border: "1px solid rgba(255,255,255,0.06)",
-                            backdropFilter: "blur(18px)",
-                            boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
-                        }}
-                    >
-                        <Stack spacing={1.2} alignItems="center">
-                            <Typography sx={{ color: "#fff", fontWeight: 900, fontSize: 20 }}>
+            <Box sx={pageSx}>
+                <Box sx={containerSx}>
+                    <Paper sx={loadingCardSx}>
+                        <Stack spacing={1.5} alignItems="center" sx={{ py: 4 }}>
+                            <Avatar
+                                sx={{
+                                    width: 62,
+                                    height: 62,
+                                    bgcolor: "rgba(239,68,68,0.14)",
+                                    color: "#fda4af",
+                                }}
+                            >
+                                <Shield />
+                            </Avatar>
+                            <Typography sx={{ color: "#fff", fontWeight: 900, fontSize: 22 }}>
                                 Erişim Yok
                             </Typography>
                             <Typography
                                 sx={{
                                     color: "rgba(255,255,255,0.65)",
-                                    fontSize: 13,
+                                    fontSize: 14,
                                     textAlign: "center",
-                                    maxWidth: 440,
+                                    maxWidth: 500,
                                 }}
                             >
                                 Bu ekrana erişim yetkiniz bulunmuyor. Yönetici panelinden “VKN Ekle” ekran izni verilmelidir.
@@ -369,115 +379,112 @@ export default function VknEkle({ kullanici }) {
     }
 
     return (
-        <Box sx={{ p: { xs: 2, md: 4 } }}>
-            <Box sx={{ maxWidth: 980, mx: "auto" }}>
-                <Paper
-                    elevation={0}
-                    sx={{
-                        p: { xs: 2.5, md: 3 },
-                        borderRadius: "24px",
-                        bgcolor: "rgba(15, 23, 42, 0.55)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        backdropFilter: "blur(18px)",
-                        boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
-                        mb: 2.5,
-                    }}
-                >
+        <Box sx={pageSx}>
+            <Box sx={containerSx}>
+                <Box sx={heroSx}>
                     <Box
                         sx={{
                             display: "flex",
-                            gap: 2,
-                            alignItems: "center",
                             justifyContent: "space-between",
+                            gap: 2,
                             flexWrap: "wrap",
+                            alignItems: "center",
                         }}
                     >
                         <Box>
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.2 }}>
+                                <Avatar
+                                    sx={{
+                                        width: 42,
+                                        height: 42,
+                                        bgcolor: "rgba(59,130,246,0.18)",
+                                        color: "#93c5fd",
+                                        border: "1px solid rgba(59,130,246,0.28)",
+                                    }}
+                                >
+                                    <ContentPasteGo fontSize="small" />
+                                </Avatar>
+                                <Chip
+                                    label="VKN Yönetimi"
+                                    size="small"
+                                    sx={heroChipSx}
+                                />
+                            </Stack>
+
                             <Typography
                                 sx={{
                                     color: "#fff",
                                     fontWeight: 900,
-                                    fontSize: { xs: "1.2rem", md: "1.5rem" },
+                                    fontSize: { xs: "1.5rem", md: "2rem" },
+                                    lineHeight: 1.15,
                                 }}
                             >
-                                VKN Ekle
+                                Modern VKN Kayıt Ekranı
                             </Typography>
+
                             <Typography
                                 sx={{
-                                    mt: 0.5,
-                                    color: "rgba(148,163,184,0.95)",
-                                    fontSize: "0.9rem",
+                                    mt: 1.1,
+                                    color: "rgba(191,219,254,0.86)",
+                                    fontSize: "0.95rem",
+                                    maxWidth: 760,
                                 }}
                             >
-                                Yeni çekici/dorse kaydı oluşturup VKN bilgisini <b>plakalar.vkn</b> alanına kaydeder.
+                                Sadece <b>plakalar.vkn</b> alanına kayıt ekler ve sistemde bulunan benzersiz VKN listesini modern bir görünümle gösterir.
                             </Typography>
                         </Box>
 
-                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                             <Chip
                                 label={updatedByName ? `Kullanıcı: ${updatedByName}` : "Kullanıcı"}
                                 size="small"
-                                sx={{
-                                    bgcolor: "rgba(59,130,246,0.12)",
-                                    color: "#93c5fd",
-                                    border: "1px solid rgba(59,130,246,0.25)",
-                                    fontWeight: 700,
-                                }}
+                                sx={statChipBlue}
                             />
-
                             <Chip
-                                label={form.statu || "aktif"}
+                                label={`${vknList.length} benzersiz kayıt`}
                                 size="small"
-                                sx={{
-                                    bgcolor: "rgba(16,185,129,0.10)",
-                                    color: "#6ee7b7",
-                                    border: "1px solid rgba(16,185,129,0.22)",
-                                    fontWeight: 800,
-                                    textTransform: "uppercase",
-                                }}
+                                sx={statChipGreen}
                             />
-
                             {!perm.ekranYazma && (
                                 <Chip
-                                    label="Sadece Görüntüleme"
+                                    label="Sadece görüntüleme"
                                     size="small"
-                                    sx={{
-                                        bgcolor: "rgba(239,68,68,0.10)",
-                                        color: "#fca5a5",
-                                        border: "1px solid rgba(239,68,68,0.22)",
-                                        fontWeight: 800,
-                                    }}
+                                    sx={statChipRed}
                                 />
                             )}
-                        </Box>
+                        </Stack>
                     </Box>
-                </Paper>
+                </Box>
 
-                <Paper
-                    elevation={0}
-                    sx={{
-                        p: { xs: 2.5, md: 3.5 },
-                        borderRadius: "28px",
-                        bgcolor: "rgba(2, 6, 23, 0.55)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        backdropFilter: "blur(20px)",
-                        boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
-                    }}
-                >
-                    {hata ? (
-                        <Alert severity="error" sx={{ mb: 2 }}>
-                            {hata}
-                        </Alert>
-                    ) : null}
+                <Grid container spacing={2.5}>
+                    <Grid item xs={12} lg={5}>
+                        <Paper sx={cardSx}>
+                            <Stack direction="row" spacing={1.4} alignItems="center" sx={{ mb: 2.5 }}>
+                                <Avatar sx={sectionAvatarSx}>
+                                    <Numbers fontSize="small" />
+                                </Avatar>
+                                <Box>
+                                    <Typography sx={{ color: "#fff", fontWeight: 900, fontSize: "1.02rem" }}>
+                                        Yeni VKN Ekle
+                                    </Typography>
+                                    <Typography sx={{ color: "rgba(148,163,184,0.85)", fontSize: "0.82rem" }}>
+                                        Tek alanlı hızlı kayıt formu
+                                    </Typography>
+                                </Box>
+                            </Stack>
 
-                    {basari ? (
-                        <Alert severity="success" sx={{ mb: 2 }}>
-                            {basari}
-                        </Alert>
-                    ) : null}
+                            {hata ? (
+                                <Alert severity="error" sx={{ mb: 2 }}>
+                                    {hata}
+                                </Alert>
+                            ) : null}
 
-                    <Grid container spacing={2.2}>
-                        <Grid item xs={12} md={6}>
+                            {basari ? (
+                                <Alert severity="success" sx={{ mb: 2 }}>
+                                    {basari}
+                                </Alert>
+                            ) : null}
+
                             <TextField
                                 value={form.vkn}
                                 onChange={onChange("vkn")}
@@ -493,223 +500,343 @@ export default function VknEkle({ kullanici }) {
                                         </InputAdornment>
                                     ),
                                 }}
-                                sx={fieldSx}
+                                sx={modernFieldSx}
                             />
-                        </Grid>
 
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                value={form.statu}
-                                onChange={onChange("statu")}
-                                label="Statü"
-                                placeholder="aktif / pasif"
-                                fullWidth
-                                disabled={loading || !perm.ekranYazma}
-                                sx={fieldSx}
-                            />
-                        </Grid>
+                            <Typography sx={{ mt: 1.2, color: "rgba(148,163,184,0.72)", fontSize: "0.78rem" }}>
+                                Kaydet butonu yalnızca <b>plakalar</b> tablosundaki <b>vkn</b> alanına yeni satır ekler.
+                            </Typography>
 
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                value={form.cekici}
-                                onChange={onChange("cekici")}
-                                label="Çekici Plaka"
-                                placeholder="Örn: 34 ABC 123"
-                                fullWidth
-                                disabled={loading || !perm.ekranYazma}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <DirectionsCar sx={{ color: "rgba(148,163,184,0.9)" }} />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                sx={fieldSx}
-                            />
-                        </Grid>
+                            <Divider sx={{ my: 2.5, borderColor: "rgba(255,255,255,0.06)" }} />
 
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                value={form.dorse}
-                                onChange={onChange("dorse")}
-                                label="Dorse"
-                                placeholder="Örn: 34 XYZ 987"
-                                fullWidth
-                                disabled={loading || !perm.ekranYazma}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <LocalShipping sx={{ color: "rgba(148,163,184,0.9)" }} />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                sx={fieldSx}
-                            />
-                        </Grid>
+                            <Stack direction="row" spacing={1.4} justifyContent="flex-end">
+                                {can(BTN.CLEAR) && (
+                                    <Button
+                                        variant="outlined"
+                                        disabled={loading || !perm.ekranYazma}
+                                        onClick={resetForm}
+                                        sx={clearBtnSx}
+                                    >
+                                        Temizle
+                                    </Button>
+                                )}
 
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                value={form.ad_soyad}
-                                onChange={onChange("ad_soyad")}
-                                label="Sürücü Ad Soyad"
-                                placeholder="Örn: Ahmet Yılmaz"
-                                fullWidth
-                                disabled={loading || !perm.ekranYazma}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Person sx={{ color: "rgba(148,163,184,0.9)" }} />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                sx={fieldSx}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                value={form.tc_no}
-                                onChange={onChange("tc_no")}
-                                label="TC No"
-                                placeholder="Örn: 12345678901"
-                                fullWidth
-                                disabled={loading || !perm.ekranYazma}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Badge sx={{ color: "rgba(148,163,184,0.9)" }} />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                sx={fieldSx}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                value={form.telefon}
-                                onChange={onChange("telefon")}
-                                label="Telefon"
-                                placeholder="Örn: 05xx xxx xx xx"
-                                fullWidth
-                                disabled={loading || !perm.ekranYazma}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Phone sx={{ color: "rgba(148,163,184,0.9)" }} />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                sx={fieldSx}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                value={form.istasyon}
-                                onChange={onChange("istasyon")}
-                                label="İstasyon"
-                                placeholder="Örn: Gebze"
-                                fullWidth
-                                disabled={loading || !perm.ekranYazma}
-                                sx={fieldSx}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12}>
-                            <TextField
-                                value={form.notlar}
-                                onChange={onChange("notlar")}
-                                label="Notlar"
-                                placeholder="Ek notlar…"
-                                fullWidth
-                                multiline
-                                minRows={3}
-                                disabled={loading || !perm.ekranYazma}
-                                sx={fieldSx}
-                            />
-                        </Grid>
+                                {can(BTN.SAVE) && (
+                                    <Button
+                                        variant="contained"
+                                        startIcon={
+                                            loading ? (
+                                                <CircularProgress size={16} sx={{ color: "#fff" }} />
+                                            ) : (
+                                                <Save />
+                                            )
+                                        }
+                                        disabled={loading || !perm.ekranYazma}
+                                        onClick={handleKaydet}
+                                        sx={saveBtnSx}
+                                    >
+                                        {loading ? "Kaydediliyor…" : "Kaydet"}
+                                    </Button>
+                                )}
+                            </Stack>
+                        </Paper>
                     </Grid>
 
-                    <Divider sx={{ my: 2.5, borderColor: "rgba(255,255,255,0.06)" }} />
-
-                    <Box sx={{ display: "flex", gap: 1.5, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                        {can(BTN.CLEAR) ? (
-                            <Button
-                                variant="outlined"
-                                disabled={loading || !perm.ekranYazma}
-                                onClick={resetForm}
+                    <Grid item xs={12} lg={7}>
+                        <Paper sx={cardSx}>
+                            <Box
                                 sx={{
-                                    borderRadius: "14px",
-                                    borderColor: "rgba(148,163,184,0.35)",
-                                    color: "rgba(148,163,184,0.95)",
-                                    px: 2.2,
-                                    py: 1.2,
-                                    textTransform: "none",
-                                    fontWeight: 800,
-                                    "&:hover": {
-                                        borderColor: "rgba(148,163,184,0.55)",
-                                        bgcolor: "rgba(148,163,184,0.06)",
-                                    },
-                                    "&.Mui-disabled": { opacity: 0.5 },
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 2,
+                                    flexWrap: "wrap",
+                                    alignItems: "center",
+                                    mb: 2.2,
                                 }}
                             >
-                                Temizle
-                            </Button>
-                        ) : null}
+                                <Stack direction="row" spacing={1.4} alignItems="center">
+                                    <Avatar sx={sectionAvatarSx}>
+                                        <Dataset fontSize="small" />
+                                    </Avatar>
+                                    <Box>
+                                        <Typography sx={{ color: "#fff", fontWeight: 900, fontSize: "1.02rem" }}>
+                                            Benzersiz VKN Listesi
+                                        </Typography>
+                                        <Typography sx={{ color: "rgba(148,163,184,0.85)", fontSize: "0.82rem" }}>
+                                            Plakalar tablosundaki tekrar etmeyen VKN değerleri
+                                        </Typography>
+                                    </Box>
+                                </Stack>
 
-                        {can(BTN.SAVE) ? (
-                            <Button
-                                variant="contained"
-                                startIcon={loading ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : <Save />}
-                                disabled={loading || !perm.ekranYazma}
-                                onClick={handleKaydet}
-                                sx={{
-                                    borderRadius: "14px",
-                                    px: 2.6,
-                                    py: 1.2,
-                                    textTransform: "none",
-                                    fontWeight: 900,
-                                    bgcolor: "#3b82f6",
-                                    "&:hover": { bgcolor: "#2563eb" },
-                                    boxShadow: "0 16px 30px rgba(59,130,246,0.25)",
-                                    "&.Mui-disabled": { opacity: 0.5, color: "#fff" },
+                                <Chip
+                                    label={`${filteredList.length} gösteriliyor`}
+                                    size="small"
+                                    sx={statChipBlue}
+                                />
+                            </Box>
+
+                            <TextField
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Listede ara..."
+                                fullWidth
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <Search sx={{ color: "rgba(148,163,184,0.9)" }} />
+                                        </InputAdornment>
+                                    ),
                                 }}
-                            >
-                                {loading ? "Kaydediliyor…" : "Kaydet"}
-                            </Button>
-                        ) : null}
-                    </Box>
+                                sx={{ ...modernFieldSx, mb: 2 }}
+                            />
 
-                    <Typography sx={{ mt: 2, color: "rgba(148,163,184,0.7)", fontSize: "0.78rem" }}>
-                        * Kaydet butonu <b>plakalar</b> tablosuna yeni bir satır ekler.
-                    </Typography>
-                </Paper>
+                            {listLoading ? (
+                                <Stack spacing={1.2} alignItems="center" justifyContent="center" sx={{ py: 7 }}>
+                                    <CircularProgress size={26} />
+                                    <Typography sx={{ color: "rgba(255,255,255,0.72)" }}>
+                                        VKN listesi yükleniyor…
+                                    </Typography>
+                                </Stack>
+                            ) : filteredList.length === 0 ? (
+                                <Box
+                                    sx={{
+                                        border: "1px dashed rgba(255,255,255,0.10)",
+                                        borderRadius: "20px",
+                                        py: 6,
+                                        px: 3,
+                                        textAlign: "center",
+                                        bgcolor: "rgba(15,23,42,0.25)",
+                                    }}
+                                >
+                                    <Typography sx={{ color: "#fff", fontWeight: 800, mb: 0.8 }}>
+                                        Gösterilecek kayıt bulunamadı
+                                    </Typography>
+                                    <Typography sx={{ color: "rgba(148,163,184,0.82)", fontSize: "0.9rem" }}>
+                                        Arama filtresini temizleyin veya yeni bir VKN ekleyin.
+                                    </Typography>
+                                </Box>
+                            ) : (
+                                <List
+                                    sx={{
+                                        p: 0.5,
+                                        maxHeight: 500,
+                                        overflow: "auto",
+                                    }}
+                                >
+                                    {filteredList.map((item, index) => (
+                                        <ListItem
+                                            key={`${item}-${index}`}
+                                            sx={{
+                                                mb: 1,
+                                                borderRadius: "18px",
+                                                border: "1px solid rgba(255,255,255,0.06)",
+                                                bgcolor: "rgba(15,23,42,0.34)",
+                                                transition: "all 0.18s ease",
+                                                "&:hover": {
+                                                    transform: "translateY(-1px)",
+                                                    borderColor: "rgba(59,130,246,0.28)",
+                                                    bgcolor: "rgba(30,41,59,0.5)",
+                                                },
+                                            }}
+                                            secondaryAction={
+                                                <Chip
+                                                    label={`#${index + 1}`}
+                                                    size="small"
+                                                    sx={{
+                                                        bgcolor: "rgba(59,130,246,0.12)",
+                                                        color: "#93c5fd",
+                                                        fontWeight: 800,
+                                                        border: "1px solid rgba(59,130,246,0.2)",
+                                                    }}
+                                                />
+                                            }
+                                        >
+                                            <ListItemText
+                                                primary={item}
+                                                secondary="Benzersiz VKN kaydı"
+                                                primaryTypographyProps={{
+                                                    sx: { color: "#f8fafc", fontWeight: 800, letterSpacing: 0.3 },
+                                                }}
+                                                secondaryTypographyProps={{
+                                                    sx: { color: "rgba(148,163,184,0.78)", fontSize: "0.78rem" },
+                                                }}
+                                            />
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            )}
+                        </Paper>
+                    </Grid>
+                </Grid>
+
+                <Snackbar
+                    open={snack.open}
+                    autoHideDuration={3200}
+                    onClose={closeSnack}
+                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                >
+                    <Alert onClose={closeSnack} severity={snack.sev} variant="filled" sx={{ borderRadius: 2 }}>
+                        {snack.msg}
+                    </Alert>
+                </Snackbar>
             </Box>
-
-            <Snackbar
-                open={snack.open}
-                autoHideDuration={3200}
-                onClose={closeSnack}
-                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            >
-                <Alert onClose={closeSnack} severity={snack.sev} variant="filled" sx={{ borderRadius: 2 }}>
-                    {snack.msg}
-                </Alert>
-            </Snackbar>
         </Box>
     );
 }
 
-const fieldSx = {
-    "& .MuiInputLabel-root": { color: "rgba(148,163,184,0.9)" },
-    "& .MuiInputLabel-root.Mui-focused": { color: "#93c5fd" },
+/* =========================
+   🎨 STYLES
+========================= */
+
+const pageSx = {
+    minHeight: "100%",
+    p: { xs: 2, md: 4 },
+    background:
+        "radial-gradient(circle at top left, rgba(59,130,246,0.10), transparent 28%), radial-gradient(circle at top right, rgba(16,185,129,0.08), transparent 25%), linear-gradient(180deg, #0b1120 0%, #111827 100%)",
+};
+
+const containerSx = {
+    maxWidth: 1180,
+    mx: "auto",
+};
+
+const heroSx = {
+    mb: 2.5,
+    p: { xs: 2.5, md: 3.2 },
+    borderRadius: "30px",
+    position: "relative",
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.08)",
+    background:
+        "linear-gradient(135deg, rgba(30,41,59,0.88) 0%, rgba(15,23,42,0.78) 45%, rgba(29,78,216,0.16) 100%)",
+    backdropFilter: "blur(18px)",
+    boxShadow: "0 30px 70px rgba(0,0,0,0.34)",
+    "&::before": {
+        content: '""',
+        position: "absolute",
+        top: -100,
+        right: -60,
+        width: 240,
+        height: 240,
+        borderRadius: "50%",
+        background: "rgba(59,130,246,0.16)",
+        filter: "blur(40px)",
+    },
+};
+
+const cardSx = {
+    height: "100%",
+    p: { xs: 2.2, md: 2.8 },
+    borderRadius: "28px",
+    border: "1px solid rgba(255,255,255,0.07)",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(2,6,23,0.72) 100%)",
+    backdropFilter: "blur(16px)",
+    boxShadow: "0 24px 60px rgba(0,0,0,0.30)",
+};
+
+const loadingCardSx = {
+    p: 4,
+    borderRadius: "28px",
+    border: "1px solid rgba(255,255,255,0.07)",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(2,6,23,0.72) 100%)",
+    backdropFilter: "blur(16px)",
+    boxShadow: "0 24px 60px rgba(0,0,0,0.30)",
+};
+
+const modernFieldSx = {
+    "& .MuiInputLabel-root": {
+        color: "rgba(148,163,184,0.92)",
+        fontWeight: 600,
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+        color: "#93c5fd",
+    },
     "& .MuiOutlinedInput-root": {
         color: "#e2e8f0",
-        bgcolor: "rgba(15,23,42,0.35)",
-        borderRadius: "16px",
-        "& fieldset": { borderColor: "rgba(255,255,255,0.10)" },
-        "&:hover fieldset": { borderColor: "rgba(59,130,246,0.35)" },
-        "&.Mui-focused fieldset": { borderColor: "rgba(59,130,246,0.55)" },
+        borderRadius: "18px",
+        background: "rgba(15,23,42,0.48)",
+        transition: "all 0.2s ease",
+        "& fieldset": {
+            borderColor: "rgba(255,255,255,0.08)",
+        },
+        "&:hover fieldset": {
+            borderColor: "rgba(59,130,246,0.35)",
+        },
+        "&.Mui-focused": {
+            boxShadow: "0 0 0 4px rgba(59,130,246,0.10)",
+        },
+        "&.Mui-focused fieldset": {
+            borderColor: "rgba(59,130,246,0.55)",
+        },
     },
+};
+
+const saveBtnSx = {
+    borderRadius: "16px",
+    px: 2.8,
+    py: 1.2,
+    textTransform: "none",
+    fontWeight: 900,
+    bgcolor: "#2563eb",
+    backgroundImage: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+    boxShadow: "0 18px 36px rgba(37,99,235,0.32)",
+    "&:hover": {
+        bgcolor: "#1d4ed8",
+        boxShadow: "0 20px 38px rgba(37,99,235,0.38)",
+    },
+    "&.Mui-disabled": {
+        opacity: 0.5,
+        color: "#fff",
+    },
+};
+
+const clearBtnSx = {
+    borderRadius: "16px",
+    px: 2.4,
+    py: 1.2,
+    textTransform: "none",
+    fontWeight: 800,
+    color: "rgba(226,232,240,0.92)",
+    borderColor: "rgba(148,163,184,0.28)",
+    background: "rgba(148,163,184,0.04)",
+    "&:hover": {
+        borderColor: "rgba(148,163,184,0.45)",
+        background: "rgba(148,163,184,0.08)",
+    },
+};
+
+const sectionAvatarSx = {
+    width: 42,
+    height: 42,
+    bgcolor: "rgba(59,130,246,0.12)",
+    color: "#93c5fd",
+    border: "1px solid rgba(59,130,246,0.24)",
+};
+
+const heroChipSx = {
+    bgcolor: "rgba(59,130,246,0.12)",
+    color: "#bfdbfe",
+    border: "1px solid rgba(59,130,246,0.26)",
+    fontWeight: 800,
+};
+
+const statChipBlue = {
+    bgcolor: "rgba(59,130,246,0.12)",
+    color: "#93c5fd",
+    border: "1px solid rgba(59,130,246,0.24)",
+    fontWeight: 800,
+};
+
+const statChipGreen = {
+    bgcolor: "rgba(16,185,129,0.10)",
+    color: "#6ee7b7",
+    border: "1px solid rgba(16,185,129,0.22)",
+    fontWeight: 800,
+};
+
+const statChipRed = {
+    bgcolor: "rgba(239,68,68,0.10)",
+    color: "#fca5a5",
+    border: "1px solid rgba(239,68,68,0.22)",
+    fontWeight: 800,
 };

@@ -11,6 +11,7 @@ import {
     Alert,
     Chip,
     Tooltip,
+    useMediaQuery,
 } from "@mui/material";
 import {
     Timeline,
@@ -40,16 +41,17 @@ export default function Anasayfa() {
     const [plakalarRows, setPlakalarRows] = useState([]);
     const [atamalarRows, setAtamalarRows] = useState([]);
     const [tamamlananRows, setTamamlananRows] = useState([]);
-    const [akışFiltre, setAkışFiltre] = useState("tum");
+    const [akisFiltre, setAkisFiltre] = useState("tum");
+
+    const isMobile = useMediaQuery("(max-width:900px)");
+    const isTablet = useMediaQuery("(max-width:1200px)");
 
     useEffect(() => {
         try {
             const rawUser = localStorage.getItem("bapsis_user");
-
             if (!rawUser) return;
 
             const parsed = JSON.parse(rawUser);
-
             const username = (parsed?.username || "").trim();
             const displayName = (parsed?.displayName || "").trim();
 
@@ -310,18 +312,18 @@ export default function Anasayfa() {
     }, [plakalarRows, atamalarRows, tamamlananRows, aktifKullanici, gorunenAd]);
 
     const liveFeed = useMemo(() => {
-        if (akışFiltre === "tum") return hesap.liveFeedRaw;
-        if (akışFiltre === "kritik") {
+        if (akisFiltre === "tum") return hesap.liveFeedRaw;
+        if (akisFiltre === "kritik") {
             return hesap.liveFeedRaw.filter((x) => x.durum === "kritik" || x.durum === "bekliyor");
         }
-        if (akışFiltre === "teslim") {
+        if (akisFiltre === "teslim") {
             return hesap.liveFeedRaw.filter((x) => x.durum === "teslim");
         }
-        if (akışFiltre === "bekleyen") {
+        if (akisFiltre === "bekleyen") {
             return hesap.liveFeedRaw.filter((x) => x.durum === "bekliyor");
         }
         return hesap.liveFeedRaw;
-    }, [hesap.liveFeedRaw, akışFiltre]);
+    }, [hesap.liveFeedRaw, akisFiltre]);
 
     return (
         <Box sx={stil.anaKonteyner}>
@@ -338,7 +340,7 @@ export default function Anasayfa() {
                 />
             </Box>
 
-            <Container maxWidth="xl" sx={{ position: "relative", zIndex: 1 }}>
+            <Container maxWidth="xl" sx={stil.containerWrap}>
                 <Box sx={stil.ustBar}>
                     <motion.div initial={{ opacity: 0, y: -18 }} animate={{ opacity: 1, y: 0 }}>
                         <Typography variant="h3" sx={stil.baslik}>
@@ -349,7 +351,13 @@ export default function Anasayfa() {
                         </Typography>
                     </motion.div>
 
-                    <Box sx={{ display: "flex", gap: 1.25 }}>
+                    <Box sx={stil.ustBarSag}>
+                        {!isMobile && (
+                            <Chip
+                                label={isTablet ? "Canlı görünüm" : "Canlı operasyon görünümü"}
+                                sx={stil.ustChip}
+                            />
+                        )}
                         <Tooltip title="Bildirimler">
                             <IconButton sx={stil.ustButon}>
                                 <NotificationsNone />
@@ -376,8 +384,8 @@ export default function Anasayfa() {
                     </Box>
                 ) : null}
 
-                <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
-                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }} sx={{ mb: { xs: 2.2, md: 3.5 } }}>
+                    <Grid item xs={12} sm={6} md={4} xl={2}>
                         <ModernKart
                             ikon={<Timeline />}
                             baslik="GÜNLÜK SEFER"
@@ -388,7 +396,7 @@ export default function Anasayfa() {
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                    <Grid item xs={12} sm={6} md={4} xl={2}>
                         <ModernKart
                             ikon={<AssignmentLate />}
                             baslik="BEKLEYEN"
@@ -400,7 +408,7 @@ export default function Anasayfa() {
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                    <Grid item xs={12} sm={6} md={4} xl={2}>
                         <ModernKart
                             ikon={<CheckCircleOutline />}
                             baslik="TAMAMLANAN"
@@ -411,7 +419,7 @@ export default function Anasayfa() {
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                    <Grid item xs={12} sm={6} md={4} xl={2}>
                         <ModernKart
                             ikon={<Speed />}
                             baslik="AKTİF FİLO"
@@ -422,7 +430,7 @@ export default function Anasayfa() {
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                    <Grid item xs={12} sm={6} md={4} xl={2}>
                         <ModernKart
                             ikon={<WarningAmber />}
                             baslik="KRİTİK KAYIT"
@@ -434,7 +442,7 @@ export default function Anasayfa() {
                         />
                     </Grid>
 
-                    <Grid item xs={12} sm={6} md={4} lg={2}>
+                    <Grid item xs={12} sm={6} md={4} xl={2}>
                         <ModernKart
                             ikon={<FactCheck />}
                             baslik="VERİ KALİTESİ"
@@ -446,34 +454,18 @@ export default function Anasayfa() {
                     </Grid>
                 </Grid>
 
-                <Grid container spacing={2.5} sx={{ mb: 2 }}>
+                <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }} sx={{ mb: 2 }}>
                     <Grid item xs={12} xl={8}>
                         <PanelKarti
                             baslik="Canlı Operasyon Akışı"
                             alt="Son güncellenen atamalar"
-                            minHeight={430}
+                            minHeight={{ xs: "auto", md: 430 }}
                             sagAlan={
                                 <Box sx={stil.filtreAlan}>
-                                    <MiniFilter
-                                        label="Tümü"
-                                        aktif={akışFiltre === "tum"}
-                                        onClick={() => setAkışFiltre("tum")}
-                                    />
-                                    <MiniFilter
-                                        label="Kritik"
-                                        aktif={akışFiltre === "kritik"}
-                                        onClick={() => setAkışFiltre("kritik")}
-                                    />
-                                    <MiniFilter
-                                        label="Teslim"
-                                        aktif={akışFiltre === "teslim"}
-                                        onClick={() => setAkışFiltre("teslim")}
-                                    />
-                                    <MiniFilter
-                                        label="Bekleyen"
-                                        aktif={akışFiltre === "bekleyen"}
-                                        onClick={() => setAkışFiltre("bekleyen")}
-                                    />
+                                    <MiniFilter label="Tümü" aktif={akisFiltre === "tum"} onClick={() => setAkisFiltre("tum")} />
+                                    <MiniFilter label="Kritik" aktif={akisFiltre === "kritik"} onClick={() => setAkisFiltre("kritik")} />
+                                    <MiniFilter label="Teslim" aktif={akisFiltre === "teslim"} onClick={() => setAkisFiltre("teslim")} />
+                                    <MiniFilter label="Bekleyen" aktif={akisFiltre === "bekleyen"} onClick={() => setAkisFiltre("bekleyen")} />
                                 </Box>
                             }
                         >
@@ -482,11 +474,7 @@ export default function Anasayfa() {
                                     <Typography sx={{ color: "#64748b" }}>Kayıt bulunamadı.</Typography>
                                 ) : (
                                     liveFeed.map((row) => (
-                                        <motion.div
-                                            key={row.id}
-                                            whileHover={{ x: 4 }}
-                                            style={stil.listeElemanMotion}
-                                        >
+                                        <motion.div key={row.id} whileHover={{ x: 4 }} style={stil.listeElemanMotion}>
                                             <Box sx={stil.feedItem}>
                                                 <Box
                                                     sx={{
@@ -505,12 +493,12 @@ export default function Anasayfa() {
 
                                                 <Box sx={stil.sagBilgiAlani}>
                                                     <DurumChip durum={row.durum} />
-                                                    <Typography sx={stil.zamanMetin}>
-                                                        {hesap.minutesAgoText(row.updatedAt)}
-                                                    </Typography>
-                                                    <IconButton size="small" sx={{ color: "#3b82f6" }}>
-                                                        <OpenInNew fontSize="inherit" />
-                                                    </IconButton>
+                                                    <Typography sx={stil.zamanMetin}>{hesap.minutesAgoText(row.updatedAt)}</Typography>
+                                                    {!isMobile && (
+                                                        <IconButton size="small" sx={{ color: "#3b82f6" }}>
+                                                            <OpenInNew fontSize="inherit" />
+                                                        </IconButton>
+                                                    )}
                                                 </Box>
                                             </Box>
                                         </motion.div>
@@ -521,10 +509,10 @@ export default function Anasayfa() {
                     </Grid>
 
                     <Grid item xs={12} xl={4}>
-                        <PanelKarti baslik="Operasyon Skoru" alt="Günlük performans özeti" minHeight={430}>
+                        <PanelKarti baslik="Operasyon Skoru" alt="Günlük performans özeti" minHeight={{ xs: "auto", md: 430 }}>
                             <Box sx={stil.performansKonteyner}>
                                 <Box sx={stil.skorDaire}>
-                                    <Typography variant="h2" sx={{ fontWeight: 900, color: "#10b981" }}>
+                                    <Typography variant="h2" sx={stil.skorPuan}>
                                         {Number.isFinite(hesap.skor) ? hesap.skor : 0}
                                     </Typography>
                                     <Typography variant="caption" sx={{ color: "#94a3b8", letterSpacing: 1 }}>
@@ -537,39 +525,21 @@ export default function Anasayfa() {
                                         Atama Sağlığı <span>%{hesap.pctAssignment}</span>
                                     </Typography>
                                     <Box sx={stil.progressLine}>
-                                        <Box
-                                            sx={{
-                                                ...stil.progressFill,
-                                                width: `${hesap.pctAssignment}%`,
-                                                bgcolor: "#10b981",
-                                            }}
-                                        />
+                                        <Box sx={{ ...stil.progressFill, width: `${hesap.pctAssignment}%`, bgcolor: "#10b981" }} />
                                     </Box>
 
                                     <Typography sx={{ ...stil.progressLabel, mt: 2.5 }}>
                                         Teslim Oranı <span>%{hesap.pctDelivery}</span>
                                     </Typography>
                                     <Box sx={stil.progressLine}>
-                                        <Box
-                                            sx={{
-                                                ...stil.progressFill,
-                                                width: `${hesap.pctDelivery}%`,
-                                                bgcolor: "#3b82f6",
-                                            }}
-                                        />
+                                        <Box sx={{ ...stil.progressFill, width: `${hesap.pctDelivery}%`, bgcolor: "#3b82f6" }} />
                                     </Box>
 
                                     <Typography sx={{ ...stil.progressLabel, mt: 2.5 }}>
                                         Veri Kalitesi <span>%{hesap.veriKaliteOrani}</span>
                                     </Typography>
                                     <Box sx={stil.progressLine}>
-                                        <Box
-                                            sx={{
-                                                ...stil.progressFill,
-                                                width: `${hesap.veriKaliteOrani}%`,
-                                                bgcolor: "#14b8a6",
-                                            }}
-                                        />
+                                        <Box sx={{ ...stil.progressFill, width: `${hesap.veriKaliteOrani}%`, bgcolor: "#14b8a6" }} />
                                     </Box>
                                 </Box>
                             </Box>
@@ -577,12 +547,12 @@ export default function Anasayfa() {
                     </Grid>
                 </Grid>
 
-                <Grid container spacing={2.5}>
+                <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }}>
                     <Grid item xs={12} md={6} xl={4}>
                         <PanelKarti
                             baslik="İşlem Geçmişi"
                             alt={`Son kim hangi kayıt üzerinde işlem yaptı${aktifKullanici ? ` • Aktif kullanıcı: ${aktifKullanici}` : ""}`}
-                            minHeight={340}
+                            minHeight={{ xs: "auto", md: 340 }}
                         >
                             <Box sx={stil.listeKonteyner}>
                                 {hesap.recentActions.length === 0 ? (
@@ -591,13 +561,7 @@ export default function Anasayfa() {
                                     hesap.recentActions.map((item) => (
                                         <motion.div key={item.id} whileHover={{ x: 4 }} style={stil.listeElemanMotion}>
                                             <Box sx={stil.historyItem}>
-                                                <Box
-                                                    sx={{
-                                                        ...stil.ikonMini,
-                                                        bgcolor: "rgba(59,130,246,0.12)",
-                                                        color: "#3b82f6",
-                                                    }}
-                                                >
+                                                <Box sx={{ ...stil.ikonMini, bgcolor: "rgba(59,130,246,0.12)", color: "#3b82f6" }}>
                                                     <Autorenew fontSize="inherit" />
                                                 </Box>
 
@@ -609,7 +573,7 @@ export default function Anasayfa() {
                                                         Sefer #{item.sefer} • {item.route}
                                                     </Typography>
 
-                                                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.2 }}>
+                                                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.2, flexWrap: "wrap" }}>
                                                         <DurumChip durum={item.durum} />
                                                         <Typography sx={stil.zamanMetin}>
                                                             {hesap.minutesAgoText(item.updatedAt)}
@@ -625,12 +589,10 @@ export default function Anasayfa() {
                     </Grid>
 
                     <Grid item xs={12} md={6} xl={4}>
-                        <PanelKarti baslik="Kullanıcı Aktivitesi" alt="Aktif oturum kullanıcısı baz alınmıştır" minHeight={340}>
+                        <PanelKarti baslik="Kullanıcı Aktivitesi" alt="Aktif oturum kullanıcısı baz alınmıştır" minHeight={{ xs: "auto", md: 340 }}>
                             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.4 }}>
                                 {hesap.topUsers.length === 0 ? (
-                                    <Typography sx={{ color: "#64748b" }}>
-                                        Kullanıcı aktivitesi bulunamadı.
-                                    </Typography>
+                                    <Typography sx={{ color: "#64748b" }}>Kullanıcı aktivitesi bulunamadı.</Typography>
                                 ) : (
                                     hesap.topUsers.map((user, i) => (
                                         <Box key={user.key} sx={stil.userRow}>
@@ -655,12 +617,10 @@ export default function Anasayfa() {
                     </Grid>
 
                     <Grid item xs={12} xl={4}>
-                        <PanelKarti baslik="Kritik Uyarılar" alt="Hızlı müdahale gerektiren kayıtlar" minHeight={340}>
+                        <PanelKarti baslik="Kritik Uyarılar" alt="Hızlı müdahale gerektiren kayıtlar" minHeight={{ xs: "auto", md: 340 }}>
                             <Box sx={stil.uyariWrap}>
                                 {hesap.kritikBekleyenler.length === 0 ? (
-                                    <Typography sx={{ color: "#64748b" }}>
-                                        Kritik uyarı bulunmuyor.
-                                    </Typography>
+                                    <Typography sx={{ color: "#64748b" }}>Kritik uyarı bulunmuyor.</Typography>
                                 ) : (
                                     hesap.kritikBekleyenler.map((item) => (
                                         <Box key={item.id} sx={stil.uyariPill}>
@@ -687,8 +647,8 @@ const ModernKart = ({ ikon, baslik, deger, alt, renk, delay, alert }) => (
         style={{ height: "100%" }}
     >
         <Paper sx={{ ...stil.modernKart, borderTop: `3px solid ${renk}` }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 2 }}>
-                <Box>
+            <Box sx={stil.modernKartUst}>
+                <Box sx={{ minWidth: 0 }}>
                     <Typography sx={stil.kartEtiket}>{baslik}</Typography>
                     <Typography sx={stil.kartDeger}>{deger}</Typography>
                 </Box>
@@ -707,30 +667,13 @@ const ModernKart = ({ ikon, baslik, deger, alt, renk, delay, alert }) => (
 
 const PanelKarti = ({ children, baslik, alt, sagAlan, minHeight = 320 }) => (
     <Paper sx={{ ...stil.anaPanel, minHeight }}>
-        <Box
-            sx={{
-                mb: 2.5,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 2,
-                flexWrap: "wrap",
-            }}
-        >
-            <Box>
+        <Box sx={stil.panelHeader}>
+            <Box sx={{ minWidth: 0 }}>
                 <Typography sx={stil.panelBaslik}>{baslik}</Typography>
-                <Typography sx={{ color: "#64748b", fontSize: "0.82rem", mt: 0.6 }}>{alt}</Typography>
+                <Typography sx={stil.panelAlt}>{alt}</Typography>
             </Box>
 
-            <Box
-                sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    flexWrap: "wrap",
-                    justifyContent: "flex-end",
-                }}
-            >
+            <Box sx={stil.panelHeaderSag}>
                 {sagAlan}
                 <IconButton size="small" sx={{ color: "#3b82f6" }}>
                     <ArrowForwardIos fontSize="inherit" />
@@ -806,10 +749,15 @@ const stil = {
     anaKonteyner: {
         minHeight: "100vh",
         bgcolor: "#020617",
-        pt: { xs: 3, md: 4 },
-        pb: 8,
+        pt: { xs: 2, sm: 3, md: 4 },
+        pb: { xs: 3, md: 8 },
         position: "relative",
         overflow: "hidden",
+    },
+    containerWrap: {
+        position: "relative",
+        zIndex: 1,
+        px: { xs: "12px !important", sm: "20px !important", md: "24px !important" },
     },
     arkaPlanEfektleri: {
         position: "absolute",
@@ -836,25 +784,39 @@ const stil = {
         borderRadius: "50%",
         background: "rgba(139, 92, 246, 0.08)",
     },
-
     ustBar: {
-        mb: 4,
+        mb: { xs: 2.2, md: 4 },
         display: "flex",
         justifyContent: "space-between",
-        alignItems: "center",
+        alignItems: { xs: "flex-start", sm: "center" },
         gap: 2,
         flexWrap: "wrap",
+    },
+    ustBarSag: {
+        display: "flex",
+        gap: 1.25,
+        alignItems: "center",
+        flexWrap: "wrap",
+        width: { xs: "100%", sm: "auto" },
+        justifyContent: { xs: "flex-end", sm: "flex-start" },
+    },
+    ustChip: {
+        color: "#cbd5e1",
+        bgcolor: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        fontWeight: 700,
     },
     baslik: {
         color: "#fff",
         fontWeight: 900,
         letterSpacing: "-1.8px",
         textShadow: "0 10px 35px rgba(59,130,246,0.16)",
-        fontSize: { xs: "2.1rem", md: "2.7rem" },
+        fontSize: "clamp(1.7rem, 4.5vw, 2.7rem)",
+        lineHeight: 1.05,
     },
     altBaslik: {
         color: "#64748b",
-        fontSize: "0.98rem",
+        fontSize: { xs: "0.88rem", md: "0.98rem" },
         mt: 0.6,
     },
     ustButon: {
@@ -869,7 +831,6 @@ const stil = {
             color: "#3b82f6",
         },
     },
-
     loadingWrap: {
         display: "flex",
         alignItems: "center",
@@ -882,16 +843,15 @@ const stil = {
         border: "1px solid rgba(255,255,255,0.05)",
         width: "fit-content",
     },
-
     modernKart: {
-        p: 2.6,
-        borderRadius: "22px",
+        p: { xs: 2, md: 2.6 },
+        borderRadius: { xs: "18px", md: "22px" },
         bgcolor: "rgba(8, 15, 33, 0.86)",
         backdropFilter: "blur(18px)",
         border: "1px solid rgba(255,255,255,0.05)",
         boxShadow: "0 12px 32px rgba(0,0,0,0.28)",
         height: "100%",
-        minHeight: 138,
+        minHeight: { xs: 122, md: 138 },
         position: "relative",
         overflow: "hidden",
         "&::after": {
@@ -902,6 +862,12 @@ const stil = {
             pointerEvents: "none",
         },
     },
+    modernKartUst: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 2,
+    },
     kartEtiket: {
         color: "#8da2c0",
         fontSize: "0.68rem",
@@ -910,44 +876,63 @@ const stil = {
     },
     kartDeger: {
         color: "#fff",
-        fontSize: "2.15rem",
+        fontSize: "clamp(1.8rem, 4vw, 2.15rem)",
         fontWeight: 900,
         lineHeight: 1.15,
         mt: 0.6,
     },
     ikonDaire: {
-        width: 46,
-        height: 46,
-        borderRadius: "14px",
+        width: { xs: 42, md: 46 },
+        height: { xs: 42, md: 46 },
+        borderRadius: { xs: "12px", md: "14px" },
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         border: "1px solid rgba(255,255,255,0.05)",
         flexShrink: 0,
     },
-
     anaPanel: {
-        p: 3,
-        borderRadius: "26px",
+        p: { xs: 2, sm: 2.4, md: 3 },
+        borderRadius: { xs: "20px", md: "26px" },
         bgcolor: "rgba(8, 15, 33, 0.82)",
         backdropFilter: "blur(22px)",
         border: "1px solid rgba(255,255,255,0.05)",
         boxShadow: "0 16px 40px rgba(0,0,0,0.24)",
         height: "100%",
     },
+    panelHeader: {
+        mb: 2.5,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 2,
+        flexWrap: "wrap",
+    },
+    panelHeaderSag: {
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        flexWrap: "wrap",
+        justifyContent: "flex-end",
+        width: { xs: "100%", sm: "auto" },
+    },
     panelBaslik: {
         color: "#fff",
         fontWeight: 800,
-        fontSize: "1.22rem",
+        fontSize: { xs: "1.02rem", md: "1.22rem" },
     },
-
+    panelAlt: {
+        color: "#64748b",
+        fontSize: { xs: "0.78rem", md: "0.82rem" },
+        mt: 0.6,
+    },
     filtreAlan: {
         display: "flex",
         gap: 0.8,
         flexWrap: "wrap",
-        justifyContent: "flex-end",
+        justifyContent: { xs: "flex-start", sm: "flex-end" },
+        width: { xs: "100%", sm: "auto" },
     },
-
     listeKonteyner: {
         display: "flex",
         flexDirection: "column",
@@ -960,8 +945,8 @@ const stil = {
         display: "flex",
         alignItems: "flex-start",
         gap: 1.5,
-        p: 1.4,
-        borderRadius: "18px",
+        p: { xs: 1.2, md: 1.4 },
+        borderRadius: { xs: "16px", md: "18px" },
         bgcolor: "rgba(255,255,255,0.02)",
         border: "1px solid rgba(255,255,255,0.05)",
         transition: "all .2s ease",
@@ -975,8 +960,8 @@ const stil = {
         display: "flex",
         alignItems: "flex-start",
         gap: 1.2,
-        p: 1.4,
-        borderRadius: "18px",
+        p: { xs: 1.2, md: 1.4 },
+        borderRadius: { xs: "16px", md: "18px" },
         bgcolor: "rgba(255,255,255,0.02)",
         border: "1px solid rgba(255,255,255,0.05)",
         transition: "all .2s ease",
@@ -989,25 +974,29 @@ const stil = {
         display: "flex",
         alignItems: "center",
         gap: 1,
-        ml: "auto",
+        ml: { xs: 0, md: "auto" },
+        width: { xs: "100%", md: "auto" },
         flexWrap: "wrap",
-        justifyContent: "flex-end",
+        justifyContent: { xs: "flex-start", md: "flex-end" },
+        pl: { xs: 3.1, md: 0 },
     },
     listeMetin: {
         color: "#e2e8f0",
         fontWeight: 700,
-        fontSize: "0.95rem",
+        fontSize: { xs: "0.89rem", md: "0.95rem" },
         overflow: "hidden",
         textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
+        whiteSpace: { xs: "normal", md: "nowrap" },
+        lineHeight: 1.35,
     },
     listeAltMetin: {
         color: "#72839d",
-        fontSize: "0.81rem",
+        fontSize: { xs: "0.78rem", md: "0.81rem" },
         mt: 0.45,
         overflow: "hidden",
         textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
+        whiteSpace: { xs: "normal", md: "nowrap" },
+        lineHeight: 1.45,
     },
     zamanMetin: {
         color: "#64748b",
@@ -1016,7 +1005,6 @@ const stil = {
         whiteSpace: "nowrap",
         flexShrink: 0,
     },
-
     durumNokta: {
         width: 10,
         height: 10,
@@ -1025,28 +1013,31 @@ const stil = {
         flexShrink: 0,
         mt: 0.7,
     },
-
     performansKonteyner: {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        pt: 1.5,
+        pt: { xs: 0.5, md: 1.5 },
         height: "100%",
         justifyContent: "center",
     },
     skorDaire: {
-        width: 168,
-        height: 168,
+        width: { xs: 144, md: 168 },
+        height: { xs: 144, md: 168 },
         borderRadius: "50%",
         border: "10px solid rgba(16, 185, 129, 0.08)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        boxShadow:
-            "inset 0 0 30px rgba(16, 185, 129, 0.08), 0 0 34px rgba(16,185,129,0.06)",
+        boxShadow: "inset 0 0 30px rgba(16, 185, 129, 0.08), 0 0 34px rgba(16,185,129,0.06)",
     },
-
+    skorPuan: {
+        fontWeight: 900,
+        color: "#10b981",
+        fontSize: { xs: "2.2rem", md: "3rem" },
+        lineHeight: 1,
+    },
     progressLabel: {
         color: "#fff",
         fontSize: "0.9rem",
@@ -1054,6 +1045,7 @@ const stil = {
         display: "flex",
         justifyContent: "space-between",
         fontWeight: 600,
+        gap: 2,
     },
     progressLine: {
         width: "100%",
@@ -1067,7 +1059,6 @@ const stil = {
         borderRadius: 999,
         transition: "width .35s ease",
     },
-
     ikonMini: {
         width: 34,
         height: 34,
@@ -1079,12 +1070,11 @@ const stil = {
         border: "1px solid rgba(255,255,255,0.04)",
         flexShrink: 0,
     },
-
     userRow: {
         display: "flex",
         alignItems: "center",
         gap: 1.4,
-        p: 1.4,
+        p: { xs: 1.15, md: 1.4 },
         borderRadius: "16px",
         bgcolor: "rgba(255,255,255,0.02)",
         border: "1px solid rgba(255,255,255,0.04)",
@@ -1122,7 +1112,6 @@ const stil = {
         fontWeight: 700,
         mt: 0.25,
     },
-
     uyariWrap: {
         display: "flex",
         flexDirection: "column",
@@ -1142,9 +1131,10 @@ const stil = {
     },
     uyariText: {
         color: "#f8fafc",
-        fontSize: "0.82rem",
+        fontSize: { xs: "0.79rem", md: "0.82rem" },
         overflow: "hidden",
         textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
+        whiteSpace: { xs: "normal", md: "nowrap" },
+        lineHeight: 1.4,
     },
 };

@@ -43,6 +43,8 @@ import {
     DeleteOutline as DeleteOutlineIcon,
     Clear as ClearIcon,
 } from "@mui/icons-material";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 
 // ✅ Excel export için
 import ExcelJS from "exceljs";
@@ -51,6 +53,7 @@ import { saveAs } from "file-saver";
 // ✅ navlun rules / typing engine
 import { toNumber } from "../plakaAtama/navlunRules";
 import { useNavlunTypingDiscount } from "../plakaAtama/useNavlunEngine";
+
 
 /* =========================================================
    ✅ YETKİ SİSTEMİ (Ekran + Buton + Grid Kolon)
@@ -240,6 +243,9 @@ function chunkArray(arr, size) {
 }
 
 export default function PlakaAtamaPremiumGrid({ batchId = null }) {
+    const theme = useTheme();
+    const isTablet = useMediaQuery("(max-width:1200px)");
+    const isMobile = useMediaQuery("(max-width:768px)");
     /* =========================
        ✅ PERMISSION STATE
     ========================= */
@@ -365,6 +371,39 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             })
             .map((c) => c.key);
     }, [colPerms]);
+    const responsiveVisibleColumnKeys = useMemo(() => {
+        let keys = visibleColumnKeys;
+
+        if (isTablet && !isMobile) {
+            const tabletHidden = new Set([
+                "varis2",
+                "varis3",
+                "guncellendi",
+                "teslimat",
+                "datalogerno",
+            ]);
+            keys = keys.filter((key) => !tabletHidden.has(key));
+        }
+
+        if (isMobile) {
+            const mobileHidden = new Set([
+                "sevk",
+                "dorse",
+                "tc",
+                "tel",
+                "varis2",
+                "varis3",
+                "guncellendi",
+                "teslimat",
+                "datalogerno",
+                "peron_no",
+                "arac_durumu",
+            ]);
+            keys = keys.filter((key) => !mobileHidden.has(key));
+        }
+
+        return keys;
+    }, [visibleColumnKeys, isTablet, isMobile]);
 
     const editableColumnKeys = useMemo(() => {
         const forcedListboxFields = new Set([
@@ -2135,6 +2174,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
+                px: { xs: 1, sm: 1.25, md: 1.5 },
             }}
         >
             {/* HEADER */}
@@ -2147,7 +2187,14 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     flexShrink: 0,
                 }}
             >
-                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
+                <Stack
+                    direction="row"
+                    alignItems="center"
+                    spacing={1.2}
+                    useFlexGap
+                    flexWrap="wrap"
+                    sx={{ mb: 1 }}
+                >
                     <Box sx={s.brandDot} />
                     <Typography sx={s.heroKicker}>LOGISTICS ENGINE • v5</Typography>
 
@@ -2193,11 +2240,13 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     <Stack
                         direction="row"
                         spacing={1}
+                        useFlexGap
                         sx={{
                             mb: 0.5,
                             flexWrap: "wrap",
-                            justifyContent: { xs: "flex-start", md: "flex-end" },
+                            justifyContent: { xs: "flex-start", lg: "flex-end" },
                             rowGap: 1,
+                            columnGap: 1,
                         }}
                     >
                         {can(BTN.COMPLETE_SELECTED) ? (
@@ -2275,8 +2324,9 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 <Box
                     sx={{
                         ...s.search,
-                        width: { xs: "100%", sm: "auto" },
-                        minWidth: { xs: "100%", sm: 260 },
+                        width: { xs: "100%", md: 320, lg: 360 },
+                        minWidth: 0,
+                        flexShrink: 0,
                     }}
                 >
                     <SearchIcon sx={{ color: "#3b82f6", fontSize: 20 }} />
@@ -2344,9 +2394,10 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     flex: "1 1 auto",
                     minHeight: 0,
                     maxHeight: { xs: "68dvh", md: "74dvh" },
-                    overflow: "hidden",
+                    overflow: "auto",
                     display: "flex",
                     pb: { xs: 1, sm: 2 },
+                    borderRadius: 3,
                 }}
             >
                 <PlakaAtamaGrid
@@ -2365,7 +2416,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     allSelected={allSelected}
                     someSelected={someSelected}
                     canEdit={perm.ekranYazma && can(BTN.ROW_EDIT)}
-                    visibleColumnKeys={visibleColumnKeys}
+                    visibleColumnKeys={responsiveVisibleColumnKeys}
                     editableColumnKeys={editableColumnKeys}
                 />
             </Box>
@@ -2375,9 +2426,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 open={lb.open}
                 anchorEl={lb.anchorEl}
                 onClose={() => setLb({ open: false, anchorEl: null, rowId: null, field: null, query: "" })}
-                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                PaperProps={{ sx: s.listboxPaper }}
+                anchorOrigin={{ vertical: "bottom", horizontal: isMobile ? "center" : "left" }}
+                transformOrigin={{ vertical: "top", horizontal: isMobile ? "center" : "left" }}
+                PaperProps={{
+                    sx: {
+                        ...s.listboxPaper,
+                        width: isMobile ? "calc(100vw - 24px)" : isTablet ? 360 : undefined,
+                        maxWidth: "calc(100vw - 24px)",
+                    },
+                }}
             >
                 <Box sx={{ p: 1.2, pb: 1 }}>
                     {lb.field !== "arac_durumu" && lb.field !== "peron_no" ? (

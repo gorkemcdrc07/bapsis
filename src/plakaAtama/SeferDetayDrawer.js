@@ -88,6 +88,7 @@ export default function SeferDetayDrawer({
     const [scanLoading, setScanLoading] = React.useState(false);
 
     const qrRef = React.useRef(null);
+    const qrStartingRef = React.useRef(false);
     const qrRegionId = "irsaliye-qr-reader";
 
     const selectFieldSx = (clickable) => ({
@@ -114,12 +115,19 @@ export default function SeferDetayDrawer({
     const extractIrsaliyeNo = React.useCallback((rawText) => {
         const text = String(rawText ?? "").trim();
 
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed?.no) {
+                return String(parsed.no).trim();
+            }
+        } catch (_) {
+            // JSON parse olmazsa regex ile devam
+        }
+
         const patterns = [
-            /"no"\s*\.\s*"([^"]+)"/i,
-            /\bno\b\s*\.\s*"([^"]+)"/i,
-            /\bno\b\s*[:=]\s*"?(.*?)"?(?:[,}\s]|$)/i,
-            /\bno\b\s+"([^"]+)"/i,
-            /\bno\b\s+([A-Za-z0-9\-_/]+)/i,
+            /"no"\s*:\s*"([^"]+)"/i,
+            /\bno\b\s*[:=]\s*"([^"]+)"/i,
+            /\bno\b\s*[:=]\s*([A-Za-z0-9\-_/]+)/i,
         ];
 
         for (const pattern of patterns) {
@@ -151,6 +159,8 @@ export default function SeferDetayDrawer({
             }
         } catch (e) {
             console.error("QR stop error:", e);
+        } finally {
+            qrStartingRef.current = false;
         }
     }, []);
 
@@ -163,55 +173,81 @@ export default function SeferDetayDrawer({
 
     const startScanner = React.useCallback(async () => {
         if (!row?.id || !canEdit) return;
+        if (qrStartingRef.current || qrRef.current) return;
 
+        qrStartingRef.current = true;
         setScanError("");
         setScanLoading(true);
         setScanOpen(true);
 
         setTimeout(async () => {
             try {
+                const qrContainer = document.getElementById(qrRegionId);
+                if (!qrContainer) {
+                    setScanError("QR alanı hazırlanamadı.");
+                    setScanLoading(false);
+                    qrStartingRef.current = false;
+                    return;
+                }
+
                 const cameras = await Html5Qrcode.getCameras();
 
                 if (!cameras || cameras.length === 0) {
                     setScanError("Kamera bulunamadı.");
                     setScanLoading(false);
+                    qrStartingRef.current = false;
                     return;
                 }
 
-                const cameraId = cameras[0].id;
+                const backCamera =
+                    cameras.find((cam) => /back|rear|environment/gi.test(cam.label || "")) ||
+                    cameras[cameras.length - 1] ||
+                    cameras[0];
+
                 const qr = new Html5Qrcode(qrRegionId);
                 qrRef.current = qr;
 
                 await qr.start(
-                    cameraId,
+                    backCamera.id,
                     {
                         fps: 10,
                         qrbox: { width: 260, height: 260 },
+                        aspectRatio: 1.0,
                     },
                     async (decodedText) => {
-                        const irsaliyeNo = extractIrsaliyeNo(decodedText);
+                        try {
+                            const irsaliyeNo = extractIrsaliyeNo(decodedText);
 
-                        if (!irsaliyeNo) {
-                            setScanError('QR içinde "no" alanı bulunamadı.');
-                            return;
+                            console.log("QR OKUNDU:", decodedText);
+                            console.log("İRSALİYE NO:", irsaliyeNo);
+
+                            if (!irsaliyeNo) {
+                                setScanError('QR içinde "no" alanı bulunamadı.');
+                                return;
+                            }
+
+                            handleChange(row.id, "irsaliye", irsaliyeNo);
+                            setSavedOpen(true);
+                            await closeScanner();
+                        } catch (err) {
+                            console.error("QR decode handling error:", err);
+                            setScanError("QR verisi işlenemedi.");
                         }
-
-                        handleChange(row.id, "irsaliye", irsaliyeNo);
-                        setSavedOpen(true);
-                        await closeScanner();
                     },
                     () => {
-                        // sürekli hata basmamak için boş bırakıldı
+                        // sürekli hata göstermemek için boş bırakıldı
                     }
                 );
 
                 setScanLoading(false);
+                qrStartingRef.current = false;
             } catch (e) {
                 console.error("QR start error:", e);
                 setScanError(e?.message || "Kamera başlatılamadı.");
                 setScanLoading(false);
+                qrStartingRef.current = false;
             }
-        }, 150);
+        }, 300);
     }, [row, canEdit, extractIrsaliyeNo, handleChange, closeScanner]);
 
     React.useEffect(() => {
@@ -262,7 +298,6 @@ export default function SeferDetayDrawer({
                 },
             }}
         >
-            {/* Sticky Header */}
             <Box
                 sx={{
                     position: "sticky",
@@ -371,7 +406,6 @@ export default function SeferDetayDrawer({
                 </Stack>
             </Box>
 
-            {/* Scrollable Content */}
             <Box
                 sx={{
                     flex: 1,
@@ -413,7 +447,6 @@ export default function SeferDetayDrawer({
                     </Box>
                 ) : (
                     <>
-                        {/* Hero */}
                         <Box
                             sx={{
                                 p: 2.2,
@@ -505,7 +538,6 @@ export default function SeferDetayDrawer({
                         </Box>
 
                         <Stack spacing={2.2} sx={{ mt: 2.2 }}>
-                            {/* Araç & Sürücü */}
                             <Section
                                 title="Araç & Sürücü"
                                 subtitle="Araç ve sürücü bilgilerini seçerek güncelleyin."
@@ -628,7 +660,6 @@ export default function SeferDetayDrawer({
                                 </Box>
                             </Section>
 
-                            {/* Varışlar */}
                             <Section
                                 title="Varışlar"
                                 subtitle="Teslimat noktalarını düzenleyin."
@@ -679,7 +710,6 @@ export default function SeferDetayDrawer({
                                 </Box>
                             </Section>
 
-                            {/* Evrak & Ücret */}
                             <Section
                                 title="Evrak & Ücret"
                                 subtitle="İrsaliye, navlun ve teslimat bilgileri."
@@ -716,7 +746,7 @@ export default function SeferDetayDrawer({
                                         <Button
                                             variant="outlined"
                                             onClick={startScanner}
-                                            disabled={!canEdit}
+                                            disabled={!canEdit || scanLoading}
                                             sx={{
                                                 minWidth: 120,
                                                 height: 40,
@@ -728,7 +758,7 @@ export default function SeferDetayDrawer({
                                                 "&:hover": { borderColor: "rgba(255,255,255,0.35)" },
                                             }}
                                         >
-                                            İrsaliye Okut
+                                            {scanLoading ? "Açılıyor..." : "İrsaliye Okut"}
                                         </Button>
                                     </Box>
 
@@ -758,7 +788,6 @@ export default function SeferDetayDrawer({
                                 </Box>
                             </Section>
 
-                            {/* Sistem */}
                             <Section
                                 title="Sistem"
                                 subtitle="Otomatik alanlar."
@@ -783,7 +812,6 @@ export default function SeferDetayDrawer({
                 )}
             </Box>
 
-            {/* Sticky Footer */}
             <Box
                 sx={{
                     position: "sticky",

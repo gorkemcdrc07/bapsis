@@ -64,7 +64,6 @@ const STATUS_OPTIONS = ["AKTİF", "PASİF", "VAR", "YOK"];
 const REQUIRED_FIELDS_VEHICLE = ["cekici", "ad_soyad", "tc_no"];
 const REQUIRED_FIELDS_DRIVER = ["ad_soyad", "tc_no"];
 
-/** Tablo kolonlarını tek yerden yönet */
 const COLUMNS = [
     { key: "plaka", label: "PLAKA", sortable: false, width: 220 },
     { key: "statu", label: "STATÜ", sortable: true, width: 120 },
@@ -103,37 +102,28 @@ export default function AracBilgileri() {
     const [rows, setRows] = useState([]);
     const [search, setSearch] = useState("");
 
-    // Filters
     const [filterOpen, setFilterOpen] = useState(false);
     const [filters, setFilters] = useState({ istasyon: "Hepsi" });
 
-    // Sort
     const [sort, setSort] = useState({ key: "cekici", dir: "asc" });
 
-    // Details
     const [detail, setDetail] = useState(null);
 
-    // Create/Edit
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState("create");
-    const [createType, setCreateType] = useState("vehicle"); // vehicle | driver
+    const [createType, setCreateType] = useState("vehicle");
     const [form, setForm] = useState(blankForm());
 
-    // Delete target
     const [deleteTarget, setDeleteTarget] = useState(null);
 
-    // Snack
     const [snack, setSnack] = useState({ open: false, type: "success", msg: "" });
 
-    // Load
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState("");
 
-    // Pagination
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(100);
 
-    // Yetki
     const [permLoading, setPermLoading] = useState(true);
     const [canShow, setCanShow] = useState(false);
     const [btnPerms, setBtnPerms] = useState({});
@@ -150,7 +140,6 @@ export default function AracBilgileri() {
         return can(BTN.CREATE) || can(BTN.EDIT) || can(BTN.DELETE);
     }, [can]);
 
-    /** Yetkileri yükle */
     useEffect(() => {
         let alive = true;
 
@@ -193,7 +182,6 @@ export default function AracBilgileri() {
         };
     }, []);
 
-    /** Fetch (tüm kayıtları batch çek) */
     useEffect(() => {
         let alive = true;
 
@@ -242,7 +230,6 @@ export default function AracBilgileri() {
         };
     }, [canShow]);
 
-    /** KPI */
     const kpi = useMemo(() => {
         if (!canShow) return { total: 0, istasyonCount: 0, gpsVar: 0, gpsYok: 0 };
         const total = rows.length;
@@ -252,14 +239,12 @@ export default function AracBilgileri() {
         return { total, istasyonCount, gpsVar, gpsYok };
     }, [canShow, rows]);
 
-    /** Options */
     const istasyonOptions = useMemo(() => {
         if (!canShow) return ["Hepsi"];
         const set = new Set(rows.map((r) => r.istasyon).filter(Boolean));
         return ["Hepsi", ...Array.from(set)];
     }, [canShow, rows]);
 
-    /** Search + Filter + Sort */
     const processed = useMemo(() => {
         if (!canShow) return [];
 
@@ -453,7 +438,7 @@ export default function AracBilgileri() {
     if (permLoading) {
         return (
             <Box sx={styles.page}>
-                <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                <Box sx={styles.centerWrap}>
                     <Stack alignItems="center" spacing={1.5}>
                         <CircularProgress />
                         <Typography sx={{ color: "#fff", fontWeight: 800 }}>
@@ -468,7 +453,7 @@ export default function AracBilgileri() {
     if (!canShow) {
         return (
             <Box sx={styles.page}>
-                <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                <Box sx={styles.centerWrap}>
                     <Typography sx={{ color: "#fff", fontWeight: 800 }}>
                         Bu ekrana erişim yetkiniz yok.
                     </Typography>
@@ -479,74 +464,73 @@ export default function AracBilgileri() {
 
     return (
         <Box sx={styles.page}>
-            {/* HEADER */}
-            <Box sx={styles.header}>
-                <Stack direction="row" alignItems="center" spacing={2}>
-                    <Box sx={styles.iconBox}>
-                        <DirectionsCarRounded sx={{ fontSize: 28 }} />
-                    </Box>
-                    <Box>
-                        <Typography sx={styles.title}>Araç Bilgileri</Typography>
-                        <Typography sx={styles.subtitle}>
-                            {kpi.total} Toplam • {kpi.istasyonCount} İstasyon
-                        </Typography>
-                    </Box>
-                </Stack>
-
-                {can(BTN.CREATE) && (
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                        <Tooltip title="Yeni Araç">
-                            <Button
-                                variant="contained"
-                                disableElevation
-                                startIcon={<Add />}
-                                sx={styles.addButton}
-                                onClick={() => openCreate("vehicle")}
-                            >
-                                Yeni Araç Ekle
-                            </Button>
-                        </Tooltip>
-
-                        <Tooltip title="Şoför Ekle">
-                            <Button
-                                variant="outlined"
-                                disableElevation
-                                startIcon={<Add />}
-                                sx={styles.driverButton}
-                                onClick={() => openCreate("driver")}
-                            >
-                                Şoför Ekle
-                            </Button>
-                        </Tooltip>
+            <Box sx={styles.heroCard}>
+                <Box sx={styles.header}>
+                    <Stack direction="row" alignItems="center" spacing={2}>
+                        <Box sx={styles.iconBox}>
+                            <DirectionsCarRounded sx={{ fontSize: 28 }} />
+                        </Box>
+                        <Box>
+                            <Typography sx={styles.title}>Araç Bilgileri</Typography>
+                            <Typography sx={styles.subtitle}>
+                                {kpi.total} Toplam Kayıt • {kpi.istasyonCount} İstasyon
+                            </Typography>
+                        </Box>
                     </Stack>
-                )}
-            </Box>
 
-            {(loading || loadError) && (
-                <Box sx={{ mb: 2 }}>
-                    {loading && (
-                        <Typography sx={{ color: "rgba(255,255,255,0.75)", fontWeight: 800 }}>
-                            İşleniyor...
-                        </Typography>
-                    )}
-                    {loadError && (
-                        <Typography sx={{ color: "#ef4444", fontWeight: 900 }}>
-                            Hata: {loadError}
-                        </Typography>
+                    {can(BTN.CREATE) && (
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                            <Tooltip title="Yeni Araç">
+                                <Button
+                                    variant="contained"
+                                    disableElevation
+                                    startIcon={<Add />}
+                                    sx={styles.addButton}
+                                    onClick={() => openCreate("vehicle")}
+                                >
+                                    Yeni Araç Ekle
+                                </Button>
+                            </Tooltip>
+
+                            <Tooltip title="Şoför Ekle">
+                                <Button
+                                    variant="outlined"
+                                    disableElevation
+                                    startIcon={<Add />}
+                                    sx={styles.driverButton}
+                                    onClick={() => openCreate("driver")}
+                                >
+                                    Şoför Ekle
+                                </Button>
+                            </Tooltip>
+                        </Stack>
                     )}
                 </Box>
-            )}
 
-            {/* KPI */}
-            <Box sx={styles.kpiGrid}>
-                <KpiCard title="Toplam" value={kpi.total} icon={<DirectionsCarRounded />} accent="primary" />
-                <KpiCard title="İstasyon" value={kpi.istasyonCount} icon={<LocalShippingRounded />} accent="info" />
-                <KpiCard title="GPS Var" value={kpi.gpsVar} icon={<CheckCircleRounded />} accent="success" />
-                <KpiCard title="GPS Yok" value={kpi.gpsYok} icon={<PauseCircleRounded />} accent="neutral" />
+                {(loading || loadError) && (
+                    <Box sx={{ mb: 2 }}>
+                        {loading && (
+                            <Typography sx={{ color: "rgba(255,255,255,0.75)", fontWeight: 800 }}>
+                                İşleniyor...
+                            </Typography>
+                        )}
+                        {loadError && (
+                            <Typography sx={{ color: "#ef4444", fontWeight: 900 }}>
+                                Hata: {loadError}
+                            </Typography>
+                        )}
+                    </Box>
+                )}
+
+                <Box sx={styles.kpiGrid}>
+                    <KpiCard title="Toplam" value={kpi.total} icon={<DirectionsCarRounded />} accent="primary" />
+                    <KpiCard title="İstasyon" value={kpi.istasyonCount} icon={<LocalShippingRounded />} accent="info" />
+                    <KpiCard title="GPS Var" value={kpi.gpsVar} icon={<CheckCircleRounded />} accent="success" />
+                    <KpiCard title="GPS Yok" value={kpi.gpsYok} icon={<PauseCircleRounded />} accent="neutral" />
+                </Box>
             </Box>
 
-            {/* SEARCH + FILTER */}
-            <Box sx={styles.filterRow}>
+            <Box sx={styles.filterBar}>
                 <TextField
                     placeholder="Çekici, dorse, sürücü tc, sürücü adı, telefon, VKN, istasyon..."
                     size="small"
@@ -570,12 +554,12 @@ export default function AracBilgileri() {
                     </Tooltip>
                 )}
 
-                <Typography sx={{ ml: "auto", color: "rgba(255,255,255,0.55)", fontWeight: 800 }}>
-                    Gösterilen: {paged.length} / {processed.length}
-                </Typography>
+                <Chip
+                    label={`Gösterilen: ${paged.length} / ${processed.length}`}
+                    sx={styles.counterChip}
+                />
             </Box>
 
-            {/* TABLE */}
             <TableContainer component={Card} sx={styles.tableCard}>
                 <Table stickyHeader sx={{ minWidth: 1620 }}>
                     <TableHead>
@@ -693,17 +677,7 @@ export default function AracBilgileri() {
                 </Table>
             </TableContainer>
 
-            {/* PAGINATION */}
-            <Box
-                sx={{
-                    mt: 2,
-                    display: "flex",
-                    gap: 1.5,
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    flexWrap: "wrap",
-                }}
-            >
+            <Box sx={styles.paginationBar}>
                 <Button
                     variant="outlined"
                     sx={styles.secondaryBtn}
@@ -735,6 +709,11 @@ export default function AracBilgileri() {
                             setPage(0);
                         }}
                         sx={styles.select}
+                        MenuProps={{
+                            PaperProps: {
+                                sx: styles.menuPaper,
+                            },
+                        }}
                     >
                         {[50, 100, 200, 500].map((n) => (
                             <MenuItem key={n} value={n}>
@@ -745,7 +724,6 @@ export default function AracBilgileri() {
                 </FormControl>
             </Box>
 
-            {/* FILTER DRAWER */}
             <Drawer
                 anchor="right"
                 open={filterOpen}
@@ -770,6 +748,11 @@ export default function AracBilgileri() {
                                 label="İstasyon"
                                 onChange={(e) => setFilters((p) => ({ ...p, istasyon: e.target.value }))}
                                 sx={styles.select}
+                                MenuProps={{
+                                    PaperProps: {
+                                        sx: styles.menuPaper,
+                                    },
+                                }}
                             >
                                 {istasyonOptions.map((x) => (
                                     <MenuItem key={x} value={x}>
@@ -802,7 +785,6 @@ export default function AracBilgileri() {
                 </Box>
             </Drawer>
 
-            {/* DETAILS DRAWER */}
             <Drawer
                 anchor="right"
                 open={Boolean(detail)}
@@ -882,8 +864,13 @@ export default function AracBilgileri() {
                 )}
             </Drawer>
 
-            {/* CREATE/EDIT DIALOG */}
-            <Dialog open={formOpen} onClose={() => setFormOpen(false)} fullWidth maxWidth="md">
+            <Dialog
+                open={formOpen}
+                onClose={() => setFormOpen(false)}
+                fullWidth
+                maxWidth="md"
+                PaperProps={{ sx: styles.dialogPaper }}
+            >
                 <DialogTitle sx={styles.dialogTitle}>
                     {formMode === "create"
                         ? createType === "driver"
@@ -901,12 +888,14 @@ export default function AracBilgileri() {
                                     value={form.cekici}
                                     onChange={(e) => setForm((p) => ({ ...p, cekici: e.target.value }))}
                                     fullWidth
+                                    sx={styles.dialogField}
                                 />
                                 <TextField
                                     label="Dorse"
                                     value={form.dorse}
                                     onChange={(e) => setForm((p) => ({ ...p, dorse: e.target.value }))}
                                     fullWidth
+                                    sx={styles.dialogField}
                                 />
                             </Stack>
                         )}
@@ -917,18 +906,21 @@ export default function AracBilgileri() {
                                 value={form.tc_no}
                                 onChange={(e) => setForm((p) => ({ ...p, tc_no: e.target.value }))}
                                 fullWidth
+                                sx={styles.dialogField}
                             />
                             <TextField
                                 label="Sürücü Adı"
                                 value={form.ad_soyad}
                                 onChange={(e) => setForm((p) => ({ ...p, ad_soyad: e.target.value }))}
                                 fullWidth
+                                sx={styles.dialogField}
                             />
                             <TextField
                                 label="Sürücü Telefon"
                                 value={form.telefon}
                                 onChange={(e) => setForm((p) => ({ ...p, telefon: e.target.value }))}
                                 fullWidth
+                                sx={styles.dialogField}
                             />
                         </Stack>
 
@@ -938,18 +930,21 @@ export default function AracBilgileri() {
                                 value={form.ise_baslama_tarihi}
                                 onChange={(e) => setForm((p) => ({ ...p, ise_baslama_tarihi: e.target.value }))}
                                 fullWidth
+                                sx={styles.dialogField}
                             />
                             <TextField
                                 label="VKN"
                                 value={form.vkn}
                                 onChange={(e) => setForm((p) => ({ ...p, vkn: e.target.value }))}
                                 fullWidth
+                                sx={styles.dialogField}
                             />
                             <TextField
                                 label="Muayene"
                                 value={form.muayene}
                                 onChange={(e) => setForm((p) => ({ ...p, muayene: e.target.value }))}
                                 fullWidth
+                                sx={styles.dialogField}
                             />
                         </Stack>
 
@@ -1004,6 +999,7 @@ export default function AracBilgileri() {
                             fullWidth
                             multiline
                             minRows={3}
+                            sx={styles.dialogField}
                         />
                     </Stack>
                 </DialogContent>
@@ -1021,16 +1017,21 @@ export default function AracBilgileri() {
                 </DialogActions>
             </Dialog>
 
-            {/* DELETE CONFIRM */}
-            <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
-                <DialogTitle sx={{ fontWeight: 900 }}>Silme Onayı</DialogTitle>
+            <Dialog
+                open={Boolean(deleteTarget)}
+                onClose={() => setDeleteTarget(null)}
+                PaperProps={{ sx: styles.confirmDialogPaper }}
+            >
+                <DialogTitle sx={{ fontWeight: 900, color: "#fff" }}>Silme Onayı</DialogTitle>
                 <DialogContent>
-                    <Typography sx={{ color: "rgba(0,0,0,0.65)" }}>
+                    <Typography sx={{ color: "rgba(255,255,255,0.72)" }}>
                         <b>{deleteTarget?.ad_soyad}</b> kaydı kalıcı olarak silinecek. Emin misiniz?
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDeleteTarget(null)}>Vazgeç</Button>
+                    <Button onClick={() => setDeleteTarget(null)} sx={styles.secondaryBtn}>
+                        Vazgeç
+                    </Button>
 
                     {can(BTN.DELETE) && (
                         <Button variant="contained" disableElevation color="error" onClick={doDelete}>
@@ -1040,7 +1041,6 @@ export default function AracBilgileri() {
                 </DialogActions>
             </Dialog>
 
-            {/* SNACKBAR */}
             <Snackbar
                 open={snack.open}
                 autoHideDuration={2500}
@@ -1060,12 +1060,21 @@ export default function AracBilgileri() {
     );
 }
 
-/** --- Reusable Select --- */
 function SelectField({ label, value, onChange, options, allowEmpty }) {
     return (
         <FormControl fullWidth>
-            <InputLabel>{label}</InputLabel>
-            <Select value={value} label={label} onChange={(e) => onChange(e.target.value)}>
+            <InputLabel sx={styles.inputLabel}>{label}</InputLabel>
+            <Select
+                value={value}
+                label={label}
+                onChange={(e) => onChange(e.target.value)}
+                sx={styles.select}
+                MenuProps={{
+                    PaperProps: {
+                        sx: styles.menuPaper,
+                    },
+                }}
+            >
                 {allowEmpty && <MenuItem value="">(Boş)</MenuItem>}
                 {options.map((x) => (
                     <MenuItem key={x} value={x}>
@@ -1258,12 +1267,29 @@ function InfoRow({ label, value }) {
 
 const styles = {
     page: {
-        p: { xs: 2, md: 5 },
-        background: "radial-gradient(circle at top left, #1a1c2c 0%, #02040a 100%)",
+        p: { xs: 2, md: 4 },
+        background: "radial-gradient(circle at top left, #121827 0%, #02040a 100%)",
         minHeight: "100vh",
         color: "#fff",
         fontFamily: "'Inter', sans-serif",
     },
+
+    centerWrap: {
+        display: "flex",
+        justifyContent: "center",
+        py: 8,
+    },
+
+    heroCard: {
+        mb: 3,
+        p: { xs: 2, md: 3 },
+        borderRadius: "26px",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 24px 50px rgba(0,0,0,0.42)",
+        backdropFilter: "blur(18px)",
+    },
+
     header: {
         display: "flex",
         flexDirection: { xs: "column", sm: "row" },
@@ -1272,15 +1298,22 @@ const styles = {
         gap: 2,
         mb: 3,
     },
+
     title: {
-        fontSize: "1.85rem",
+        fontSize: { xs: "1.6rem", md: "1.95rem" },
         fontWeight: 900,
         letterSpacing: "-0.03em",
         background: "linear-gradient(90deg, #fff, #94a3b8)",
         WebkitBackgroundClip: "text",
         WebkitTextFillColor: "transparent",
     },
-    subtitle: { fontSize: "0.9rem", color: "rgba(255,255,255,0.55)", mt: 0.3 },
+
+    subtitle: {
+        fontSize: "0.9rem",
+        color: "rgba(255,255,255,0.55)",
+        mt: 0.3,
+    },
+
     iconBox: {
         width: 54,
         height: 54,
@@ -1291,7 +1324,9 @@ const styles = {
         background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
         boxShadow: "0 10px 24px rgba(59, 130, 246, 0.32)",
         color: "#fff",
+        flexShrink: 0,
     },
+
     addButton: {
         textTransform: "none",
         fontWeight: 800,
@@ -1302,6 +1337,7 @@ const styles = {
         color: "#0b1220",
         "&:hover": { background: "#e2e8f0" },
     },
+
     driverButton: {
         textTransform: "none",
         fontWeight: 900,
@@ -1321,16 +1357,23 @@ const styles = {
         display: "grid",
         gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(4, 1fr)" },
         gap: 2,
-        mb: 3,
     },
+
     kpiCard: {
         background: "rgba(255, 255, 255, 0.035)",
         borderRadius: "20px",
         border: "1px solid rgba(255,255,255,0.08)",
-        boxShadow: "0 20px 45px rgba(0,0,0,0.38)",
+        boxShadow: "0 20px 45px rgba(0,0,0,0.30)",
         overflow: "hidden",
     },
-    kpiInner: { p: 2.2, display: "flex", alignItems: "center", gap: 1.8 },
+
+    kpiInner: {
+        p: 2.2,
+        display: "flex",
+        alignItems: "center",
+        gap: 1.8,
+    },
+
     kpiIcon: {
         width: 44,
         height: 44,
@@ -1339,10 +1382,33 @@ const styles = {
         placeItems: "center",
         "& svg": { fontSize: 22, color: "#fff" },
     },
-    kpiTitle: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 800 },
-    kpiValue: { fontSize: 22, fontWeight: 950, letterSpacing: "-0.02em", mt: 0.2 },
 
-    filterRow: { display: "flex", flexWrap: "wrap", gap: 1.5, mb: 2.5, alignItems: "center" },
+    kpiTitle: {
+        color: "rgba(255,255,255,0.6)",
+        fontSize: 12,
+        fontWeight: 800,
+    },
+
+    kpiValue: {
+        fontSize: 22,
+        fontWeight: 950,
+        letterSpacing: "-0.02em",
+        mt: 0.2,
+        color: "#fff",
+    },
+
+    filterBar: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 1.5,
+        mb: 2.5,
+        alignItems: "center",
+        p: 1.5,
+        borderRadius: "18px",
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.08)",
+    },
+
     searchField: {
         width: { xs: "100%", sm: 460 },
         "& .MuiOutlinedInput-root": {
@@ -1353,13 +1419,27 @@ const styles = {
             "&:hover fieldset": { borderColor: "rgba(255,255,255,0.22)" },
             "&.Mui-focused fieldset": { borderColor: "#3b82f6" },
         },
+        "& input::placeholder": {
+            color: "rgba(255,255,255,0.45)",
+            opacity: 1,
+        },
     },
+
     filterButton: {
         background: "rgba(255,255,255,0.06)",
         borderRadius: "14px",
         color: "#fff",
         border: "1px solid rgba(255,255,255,0.12)",
         "&:hover": { background: "rgba(255,255,255,0.09)" },
+    },
+
+    counterChip: {
+        ml: "auto",
+        color: "#fff",
+        background: "rgba(255,255,255,0.07)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        fontWeight: 800,
+        borderRadius: "999px",
     },
 
     tableCard: {
@@ -1371,8 +1451,13 @@ const styles = {
         overflow: "auto",
         maxHeight: { xs: "calc(100vh - 360px)", md: "calc(100vh - 330px)" },
         "&::-webkit-scrollbar": { height: 10, width: 10 },
-        "&::-webkit-scrollbar-thumb": { background: "rgba(255,255,255,0.14)", borderRadius: 20 },
-        "&::-webkit-scrollbar-track": { background: "rgba(255,255,255,0.04)" },
+        "&::-webkit-scrollbar-thumb": {
+            background: "rgba(255,255,255,0.14)",
+            borderRadius: 20,
+        },
+        "&::-webkit-scrollbar-track": {
+            background: "rgba(255,255,255,0.04)",
+        },
     },
 
     headCell: {
@@ -1381,7 +1466,7 @@ const styles = {
         fontWeight: 900,
         letterSpacing: "0.12em",
         borderBottom: "1px solid rgba(255,255,255,0.08)",
-        background: "rgba(12,16,30,0.85)",
+        background: "rgba(12,16,30,0.92)",
         backdropFilter: "blur(10px)",
         py: 1.8,
         cursor: "pointer",
@@ -1389,9 +1474,16 @@ const styles = {
         whiteSpace: "nowrap",
         "&:hover": { color: "rgba(255,255,255,0.9)" },
     },
+
     tableRow: {
         "&:hover": { background: "rgba(255,255,255,0.03)" },
-        "& td": { borderBottom: "1px solid rgba(255,255,255,0.05)", py: 1.7, verticalAlign: "top" },
+        "& td": {
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+            py: 1.7,
+            verticalAlign: "top",
+            color: "#fff",
+            background: "transparent",
+        },
         cursor: "pointer",
     },
 
@@ -1407,6 +1499,7 @@ const styles = {
         fontFamily: "'Roboto Mono', monospace",
         whiteSpace: "nowrap",
     },
+
     avatar: {
         width: 34,
         height: 34,
@@ -1416,22 +1509,38 @@ const styles = {
         color: "#fff",
         fontWeight: 900,
     },
-    cellSoft: { color: "rgba(255,255,255,0.82)", fontWeight: 650, whiteSpace: "nowrap" },
+
+    cellSoft: {
+        color: "rgba(255,255,255,0.82)",
+        fontWeight: 650,
+        whiteSpace: "nowrap",
+    },
 
     actionInfo: {
         color: "#94a3b8",
         background: "rgba(148, 163, 184, 0.12)",
         "&:hover": { background: "rgba(148, 163, 184, 0.20)" },
     },
+
     actionEdit: {
         color: "#3b82f6",
         background: "rgba(59, 130, 246, 0.12)",
         "&:hover": { background: "rgba(59, 130, 246, 0.20)" },
     },
+
     actionDelete: {
         color: "#ef4444",
         background: "rgba(239, 68, 68, 0.12)",
         "&:hover": { background: "rgba(239, 68, 68, 0.20)" },
+    },
+
+    paginationBar: {
+        mt: 2,
+        display: "flex",
+        gap: 1.5,
+        alignItems: "center",
+        justifyContent: "flex-end",
+        flexWrap: "wrap",
     },
 
     drawerPaper: {
@@ -1440,26 +1549,58 @@ const styles = {
         color: "#fff",
         borderLeft: "1px solid rgba(255,255,255,0.08)",
     },
+
     detailPaper: {
         width: { xs: "100%", sm: 420 },
         background: "linear-gradient(180deg, rgba(14,18,32,0.98) 0%, rgba(9,12,22,0.98) 100%)",
         color: "#fff",
         borderLeft: "1px solid rgba(255,255,255,0.08)",
     },
-    drawerHeader: { px: 2.5, py: 2, display: "flex", justifyContent: "space-between", alignItems: "center" },
+
+    drawerHeader: {
+        px: 2.5,
+        py: 2,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+
     drawerClose: {
         color: "rgba(255,255,255,0.85)",
         background: "rgba(255,255,255,0.06)",
         borderRadius: "12px",
         "&:hover": { background: "rgba(255,255,255,0.10)" },
     },
-    inputLabel: { color: "rgba(255,255,255,0.65)" },
+
+    inputLabel: {
+        color: "rgba(255,255,255,0.65)",
+    },
+
     select: {
         color: "#fff",
         background: "rgba(255,255,255,0.06)",
         borderRadius: "14px",
-        "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.12)" },
-        "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.22)" },
+        "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: "rgba(255,255,255,0.12)",
+        },
+        "&:hover .MuiOutlinedInput-notchedOutline": {
+            borderColor: "rgba(255,255,255,0.22)",
+        },
+        "& .MuiSvgIcon-root": {
+            color: "#fff",
+        },
+    },
+
+    menuPaper: {
+        bgcolor: "#0f172a",
+        color: "#fff",
+        border: "1px solid rgba(255,255,255,0.08)",
+        "& .MuiMenuItem-root": {
+            color: "#fff",
+        },
+        "& .MuiMenuItem-root:hover": {
+            background: "rgba(255,255,255,0.06)",
+        },
     },
 
     primaryBtn: {
@@ -1471,25 +1612,82 @@ const styles = {
         background: "#3b82f6",
         "&:hover": { background: "#2563eb" },
     },
+
     secondaryBtn: {
         textTransform: "none",
         fontWeight: 900,
         borderRadius: "14px",
         borderColor: "rgba(255,255,255,0.18)",
-        color: "#0b1220",
-        background: "#fff",
-        "&:hover": { background: "#e2e8f0" },
+        color: "#fff",
+        background: "rgba(255,255,255,0.06)",
+        "&:hover": {
+            background: "rgba(255,255,255,0.10)",
+            borderColor: "rgba(255,255,255,0.28)",
+        },
     },
+
     dangerOutline: {
         textTransform: "none",
         fontWeight: 900,
         borderRadius: "14px",
         borderColor: "rgba(239,68,68,0.45)",
         color: "#ef4444",
-        "&:hover": { borderColor: "rgba(239,68,68,0.75)", background: "rgba(239,68,68,0.08)" },
+        "&:hover": {
+            borderColor: "rgba(239,68,68,0.75)",
+            background: "rgba(239,68,68,0.08)",
+        },
     },
 
-    dialogTitle: { fontWeight: 950 },
-    dialogContent: { background: "#fff" },
-    dialogActions: { px: 3, pb: 2.5, background: "#fff" },
+    dialogPaper: {
+        background: "linear-gradient(180deg, rgba(15,23,42,0.98), rgba(2,6,23,0.98))",
+        color: "#fff",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: "22px",
+    },
+
+    confirmDialogPaper: {
+        background: "linear-gradient(180deg, rgba(15,23,42,0.98), rgba(2,6,23,0.98))",
+        color: "#fff",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: "18px",
+    },
+
+    dialogTitle: {
+        fontWeight: 950,
+        color: "#fff",
+        pb: 1,
+    },
+
+    dialogContent: {
+        background: "transparent",
+    },
+
+    dialogActions: {
+        px: 3,
+        pb: 2.5,
+        background: "transparent",
+    },
+
+    dialogField: {
+        "& .MuiOutlinedInput-root": {
+            color: "#fff",
+            background: "rgba(255,255,255,0.04)",
+            borderRadius: "14px",
+            "& fieldset": { borderColor: "rgba(255,255,255,0.12)" },
+            "&:hover fieldset": { borderColor: "rgba(255,255,255,0.22)" },
+            "&.Mui-focused fieldset": { borderColor: "#3b82f6" },
+        },
+        "& .MuiInputLabel-root": {
+            color: "rgba(255,255,255,0.65)",
+        },
+        "& .MuiInputLabel-root.Mui-focused": {
+            color: "#93c5fd",
+        },
+        "& input": {
+            color: "#fff",
+        },
+        "& textarea": {
+            color: "#fff",
+        },
+    },
 };
