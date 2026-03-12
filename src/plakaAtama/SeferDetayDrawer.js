@@ -1,6 +1,6 @@
 ﻿// src/plakaAtama/SeferDetayDrawer.js
 import React from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import {
     Drawer,
     Box,
@@ -117,15 +117,17 @@ export default function SeferDetayDrawer({
 
         console.log("RAW QR TEXT:", text);
 
+        // 1) Önce direkt JSON parse dene
         try {
             const parsed = JSON.parse(text);
             if (parsed?.no) {
                 return String(parsed.no).trim();
             }
         } catch (_) {
-            // JSON değilse regex ile devam
+            // json değilse fallback
         }
 
+        // 2) Regex fallback
         const patterns = [
             /"no"\s*:\s*"([^"]+)"/i,
             /'no'\s*:\s*'([^']+)'/i,
@@ -137,26 +139,27 @@ export default function SeferDetayDrawer({
 
         for (const pattern of patterns) {
             const match = text.match(pattern);
-            if (match?.[1]) return String(match[1]).trim();
-            if (match?.[0]) return String(match[0]).trim();
+            if (match?.[1]) {
+                return String(match[1]).trim();
+            }
+            if (match?.[0]?.startsWith("BE")) {
+                return String(match[0]).trim();
+            }
         }
 
         return "";
     }, []);
+
     const stopScanner = React.useCallback(async () => {
         try {
             if (qrRef.current) {
                 try {
                     await qrRef.current.stop();
-                } catch (_) {
-                    // scanner durmuş olabilir
-                }
+                } catch (_) { }
 
                 try {
                     await qrRef.current.clear();
-                } catch (_) {
-                    // clear hatası önemli değil
-                }
+                } catch (_) { }
 
                 qrRef.current = null;
             }
@@ -216,6 +219,7 @@ export default function SeferDetayDrawer({
                         fps: 10,
                         qrbox: { width: 260, height: 260 },
                         aspectRatio: 1.0,
+                        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
                     },
                     async (decodedText) => {
                         try {
@@ -242,6 +246,7 @@ export default function SeferDetayDrawer({
                         // sürekli hata göstermemek için boş bırakıldı
                     }
                 );
+
                 setScanLoading(false);
                 qrStartingRef.current = false;
             } catch (e) {
@@ -885,6 +890,10 @@ export default function SeferDetayDrawer({
                 <DialogContent>
                     <Typography sx={{ fontSize: 13, color: "rgba(255,255,255,0.68)", mb: 1.5 }}>
                         Kamerayı QR koda tutun. QR içindeki <b>no</b> değeri otomatik olarak irsaliye alanına yazılır.
+                    </Typography>
+
+                    <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.60)", mb: 1.5 }}>
+                        Kare QR kodu okutun. Belgede başka barkod veya kodlar varsa sistem onları da algılayabilir.
                     </Typography>
 
                     <Box
