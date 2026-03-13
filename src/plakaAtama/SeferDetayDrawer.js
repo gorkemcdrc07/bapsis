@@ -17,6 +17,8 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
+    Divider,
+    Fade,
 } from "@mui/material";
 
 import CloseIcon from "@mui/icons-material/Close";
@@ -26,6 +28,11 @@ import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import CameraAltOutlinedIcon from "@mui/icons-material/CameraAltOutlined";
+import DocumentScannerOutlinedIcon from "@mui/icons-material/DocumentScannerOutlined";
+import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded";
+import ErrorOutlineRoundedIcon from "@mui/icons-material/ErrorOutlineRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 
 const Section = ({ title, subtitle, icon, children, sx }) => (
     <Box
@@ -72,6 +79,13 @@ const Section = ({ title, subtitle, icon, children, sx }) => (
     </Box>
 );
 
+const parseIrsaliyeList = (value) => {
+    return String(value || "")
+        .split("/")
+        .map((item) => item.trim())
+        .filter(Boolean);
+};
+
 export default function SeferDetayDrawer({
     open,
     onClose,
@@ -88,8 +102,16 @@ export default function SeferDetayDrawer({
     const [scanError, setScanError] = React.useState("");
     const [scanLoading, setScanLoading] = React.useState(false);
 
+    const [scanResultValue, setScanResultValue] = React.useState("");
+    const [scanResultType, setScanResultType] = React.useState(""); // success | error | info
+    const [scanResultMessage, setScanResultMessage] = React.useState("");
+
     const videoRef = React.useRef(null);
     const streamRef = React.useRef(null);
+
+    const currentIrsaliyeList = React.useMemo(() => {
+        return parseIrsaliyeList(row?.irsaliye);
+    }, [row?.irsaliye]);
 
     const selectFieldSx = (clickable) => ({
         "& .MuiOutlinedInput-root": {
@@ -132,6 +154,9 @@ export default function SeferDetayDrawer({
         setScanOpen(false);
         setScanLoading(false);
         setScanError("");
+        setScanResultValue("");
+        setScanResultType("");
+        setScanResultMessage("");
     }, [stopCamera]);
 
     const startScanner = React.useCallback(async () => {
@@ -139,6 +164,9 @@ export default function SeferDetayDrawer({
 
         try {
             setScanError("");
+            setScanResultValue("");
+            setScanResultType("");
+            setScanResultMessage("");
             setScanLoading(true);
             setScanOpen(true);
 
@@ -195,7 +223,6 @@ export default function SeferDetayDrawer({
         const sw = sourceCanvas.width;
         const sh = sourceCanvas.height;
 
-        // Belgenin alt yarı/orta bölgesine odaklanır
         const sx = sw * 0.06;
         const sy = sh * 0.42;
         const sWidth = sw * 0.88;
@@ -229,7 +256,7 @@ export default function SeferDetayDrawer({
         for (const pattern of patterns) {
             const match = text.match(pattern);
             if (match?.[1]) {
-                return match[1].trim();
+                return match[1].trim().toUpperCase();
             }
         }
 
@@ -242,6 +269,9 @@ export default function SeferDetayDrawer({
         try {
             setScanLoading(true);
             setScanError("");
+            setScanResultValue("");
+            setScanResultType("");
+            setScanResultMessage("");
 
             const fullCanvas = captureFrame();
             if (!fullCanvas) {
@@ -261,19 +291,44 @@ export default function SeferDetayDrawer({
 
             if (!irsaliyeNo) {
                 setScanError("Tabloda İrsaliye No bulunamadı.");
+                setScanResultType("error");
+                setScanResultMessage("Okuma tamamlandı ancak geçerli bir İrsaliye No tespit edilemedi.");
                 setScanLoading(false);
                 return;
             }
 
-            handleChange(row.id, "irsaliye", irsaliyeNo);
+            const existingList = parseIrsaliyeList(row?.irsaliye).map((x) => x.toUpperCase());
+            const normalizedNew = irsaliyeNo.toUpperCase();
+
+            if (existingList.includes(normalizedNew)) {
+                setScanResultValue(irsaliyeNo);
+                setScanResultType("error");
+                setScanResultMessage("Bu değer eklendi zaten.");
+                setScanError("Bu değer eklendi zaten.");
+                setScanLoading(false);
+                return;
+            }
+
+            const updatedValue = row?.irsaliye?.trim()
+                ? `${row.irsaliye.trim()} / ${irsaliyeNo}`
+                : irsaliyeNo;
+
+            handleChange(row.id, "irsaliye", updatedValue);
+
+            setScanResultValue(irsaliyeNo);
+            setScanResultType("success");
+            setScanResultMessage("Değer eklendi.");
+            setScanError("");
             setSavedOpen(true);
-            closeScanner();
         } catch (err) {
             console.error("OCR read error:", err);
             setScanError("Tablo okunamadı.");
+            setScanResultType("error");
+            setScanResultMessage("Tablo okunamadı.");
+        } finally {
             setScanLoading(false);
         }
-    }, [row, canEdit, captureFrame, cropTableArea, extractIrsaliyeNoFromText, handleChange, closeScanner]);
+    }, [row, canEdit, captureFrame, cropTableArea, extractIrsaliyeNoFromText, handleChange]);
 
     const handleSave = async () => {
         if (!row || !canEdit) return;
@@ -741,15 +796,20 @@ export default function SeferDetayDrawer({
                                             variant="outlined"
                                             onClick={startScanner}
                                             disabled={!canEdit || scanLoading}
+                                            startIcon={<DocumentScannerOutlinedIcon />}
                                             sx={{
-                                                minWidth: 130,
+                                                minWidth: 148,
                                                 height: 40,
                                                 borderRadius: 2.2,
                                                 textTransform: "none",
-                                                fontWeight: 700,
+                                                fontWeight: 800,
                                                 borderColor: "rgba(255,255,255,0.22)",
                                                 color: "rgba(255,255,255,0.90)",
-                                                "&:hover": { borderColor: "rgba(255,255,255,0.35)" },
+                                                background: "rgba(255,255,255,0.03)",
+                                                "&:hover": {
+                                                    borderColor: "rgba(255,255,255,0.35)",
+                                                    background: "rgba(255,255,255,0.06)",
+                                                },
                                             }}
                                         >
                                             {scanLoading ? "Açılıyor..." : "Tablodan Oku"}
@@ -860,37 +920,101 @@ export default function SeferDetayDrawer({
                 onClose={closeScanner}
                 maxWidth="sm"
                 fullWidth
+                TransitionComponent={Fade}
                 PaperProps={{
                     sx: {
-                        borderRadius: 3,
-                        background: "rgba(15,23,42,0.98)",
+                        borderRadius: 4,
+                        overflow: "hidden",
+                        background:
+                            "radial-gradient(700px 300px at 10% 0%, rgba(88,125,255,0.18), transparent 50%), linear-gradient(180deg, rgba(15,23,42,0.99), rgba(9,14,28,0.99))",
                         color: "#fff",
-                        border: "1px solid rgba(255,255,255,0.08)",
+                        border: "1px solid rgba(255,255,255,0.09)",
+                        boxShadow: "0 30px 80px rgba(0,0,0,0.55)",
                     },
                 }}
             >
-                <DialogTitle sx={{ fontWeight: 800 }}>
-                    İrsaliye Tablodan Oku
+                <DialogTitle
+                    sx={{
+                        px: 2.5,
+                        pt: 2.2,
+                        pb: 1.4,
+                    }}
+                >
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
+                        <Stack direction="row" spacing={1.2} alignItems="center">
+                            <Box
+                                sx={{
+                                    width: 42,
+                                    height: 42,
+                                    borderRadius: 2.5,
+                                    display: "grid",
+                                    placeItems: "center",
+                                    background: "rgba(255,255,255,0.08)",
+                                    border: "1px solid rgba(255,255,255,0.10)",
+                                }}
+                            >
+                                <CameraAltOutlinedIcon />
+                            </Box>
+
+                            <Box>
+                                <Typography sx={{ fontWeight: 900, fontSize: 18 }}>
+                                    İrsaliye Tablodan Oku
+                                </Typography>
+                                <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.68)" }}>
+                                    OCR ile belge üzerindeki irsaliye numarasını algıla
+                                </Typography>
+                            </Box>
+                        </Stack>
+
+                        <IconButton
+                            onClick={closeScanner}
+                            sx={{
+                                width: 38,
+                                height: 38,
+                                borderRadius: 2,
+                                background: "rgba(255,255,255,0.06)",
+                                color: "#fff",
+                                border: "1px solid rgba(255,255,255,0.08)",
+                            }}
+                        >
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
+                    </Stack>
                 </DialogTitle>
 
-                <DialogContent>
-                    <Typography sx={{ fontSize: 13, color: "rgba(255,255,255,0.68)", mb: 1.5 }}>
-                        Belgenin alt tarafındaki tabloyu kameraya gösterin. Sistem <b>İrsaliye No</b> alanını okuyup otomatik doldurur.
-                    </Typography>
-
-                    <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.60)", mb: 1.5 }}>
-                        Belgeyi düz zemine koyun, iyi ışık verin ve tabloyu mümkün olduğunca ekranın alt-orta bölümüne getirin.
-                    </Typography>
+                <DialogContent sx={{ px: 2.5, pb: 1.5 }}>
+                    <Box
+                        sx={{
+                            mb: 1.6,
+                            p: 1.5,
+                            borderRadius: 3,
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            background: "rgba(255,255,255,0.04)",
+                        }}
+                    >
+                        <Stack direction="row" spacing={1.2} alignItems="flex-start">
+                            <AutoAwesomeRoundedIcon sx={{ mt: "2px", color: "rgba(150,190,255,0.95)" }} />
+                            <Box>
+                                <Typography sx={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", fontWeight: 700 }}>
+                                    Belgeyi alt-orta alana hizalayın
+                                </Typography>
+                                <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.64)", mt: 0.3 }}>
+                                    Sistem alt bölümdeki tabloyu okuyup <b>İrsaliye No</b> alanını otomatik bulur.
+                                </Typography>
+                            </Box>
+                        </Stack>
+                    </Box>
 
                     <Box
                         sx={{
                             width: "100%",
                             minHeight: 360,
-                            borderRadius: 2,
+                            borderRadius: 3,
                             overflow: "hidden",
                             background: "rgba(255,255,255,0.04)",
                             border: "1px solid rgba(255,255,255,0.10)",
                             position: "relative",
+                            boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03)",
                         }}
                     >
                         <video
@@ -903,6 +1027,7 @@ export default function SeferDetayDrawer({
                                 height: "360px",
                                 objectFit: "cover",
                                 display: "block",
+                                background: "#0b1220",
                             }}
                         />
 
@@ -913,33 +1038,158 @@ export default function SeferDetayDrawer({
                                 top: "42%",
                                 width: "84%",
                                 height: "46%",
-                                border: "2px dashed rgba(120,160,255,0.9)",
-                                borderRadius: 2,
+                                border: "2px dashed rgba(120,160,255,0.95)",
+                                borderRadius: 2.2,
                                 pointerEvents: "none",
-                                boxShadow: "inset 0 0 0 9999px rgba(0,0,0,0.08)",
+                                boxShadow:
+                                    "inset 0 0 0 9999px rgba(0,0,0,0.10), 0 0 0 1px rgba(255,255,255,0.04)",
                             }}
                         />
+
+                        <Box
+                            sx={{
+                                position: "absolute",
+                                left: 14,
+                                top: 14,
+                                px: 1.2,
+                                py: 0.6,
+                                borderRadius: 999,
+                                fontSize: 11.5,
+                                fontWeight: 800,
+                                background: "rgba(10,12,18,0.68)",
+                                border: "1px solid rgba(255,255,255,0.10)",
+                                color: "rgba(255,255,255,0.92)",
+                                backdropFilter: "blur(8px)",
+                            }}
+                        >
+                            OCR Tarama Alanı
+                        </Box>
                     </Box>
 
-                    {scanLoading ? (
-                        <Typography sx={{ mt: 1.2, fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
-                            {videoRef.current?.srcObject ? "Tablo okunuyor..." : "Kamera açılıyor..."}
-                        </Typography>
-                    ) : null}
+                    <Stack spacing={1.3} sx={{ mt: 1.7 }}>
+                        {currentIrsaliyeList.length > 0 ? (
+                            <Box
+                                sx={{
+                                    p: 1.4,
+                                    borderRadius: 2.5,
+                                    border: "1px solid rgba(255,255,255,0.08)",
+                                    background: "rgba(255,255,255,0.035)",
+                                }}
+                            >
+                                <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.66)", mb: 1 }}>
+                                    Mevcut İrsaliye Değerleri
+                                </Typography>
 
-                    {scanError ? (
-                        <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }}>
-                            {scanError}
-                        </Alert>
-                    ) : null}
+                                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                    {currentIrsaliyeList.map((item, idx) => (
+                                        <Chip
+                                            key={`${item}-${idx}`}
+                                            label={item}
+                                            size="small"
+                                            sx={{
+                                                borderRadius: 999,
+                                                fontWeight: 700,
+                                                background: "rgba(120,160,255,0.14)",
+                                                color: "rgba(230,240,255,0.96)",
+                                                border: "1px solid rgba(120,160,255,0.20)",
+                                            }}
+                                        />
+                                    ))}
+                                </Stack>
+                            </Box>
+                        ) : null}
+
+                        {(scanLoading || scanResultMessage || scanError) && (
+                            <Box
+                                sx={{
+                                    p: 1.4,
+                                    borderRadius: 2.5,
+                                    border: "1px solid rgba(255,255,255,0.08)",
+                                    background: "rgba(255,255,255,0.035)",
+                                }}
+                            >
+                                {scanLoading ? (
+                                    <Typography sx={{ fontSize: 13, color: "rgba(255,255,255,0.76)" }}>
+                                        {videoRef.current?.srcObject ? "Tablo okunuyor..." : "Kamera açılıyor..."}
+                                    </Typography>
+                                ) : null}
+
+                                {!scanLoading && scanResultMessage ? (
+                                    <Stack spacing={1}>
+                                        <Stack direction="row" spacing={1} alignItems="center">
+                                            {scanResultType === "success" ? (
+                                                <CheckCircleOutlineRoundedIcon sx={{ color: "#66e0a3" }} />
+                                            ) : (
+                                                <ErrorOutlineRoundedIcon sx={{ color: "#ff8f8f" }} />
+                                            )}
+
+                                            <Typography
+                                                sx={{
+                                                    fontSize: 13.5,
+                                                    fontWeight: 800,
+                                                    color:
+                                                        scanResultType === "success"
+                                                            ? "rgba(210,255,228,0.96)"
+                                                            : "rgba(255,220,220,0.96)",
+                                                }}
+                                            >
+                                                {scanResultMessage}
+                                            </Typography>
+                                        </Stack>
+
+                                        {scanResultValue ? (
+                                            <Box
+                                                sx={{
+                                                    px: 1.2,
+                                                    py: 1,
+                                                    borderRadius: 2,
+                                                    border: "1px solid rgba(255,255,255,0.08)",
+                                                    background: "rgba(0,0,0,0.18)",
+                                                }}
+                                            >
+                                                <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.58)" }}>
+                                                    Okunan İrsaliye No
+                                                </Typography>
+                                                <Typography
+                                                    sx={{
+                                                        mt: 0.2,
+                                                        fontSize: 16,
+                                                        fontWeight: 900,
+                                                        letterSpacing: 0.4,
+                                                        color: "#fff",
+                                                        wordBreak: "break-all",
+                                                    }}
+                                                >
+                                                    {scanResultValue}
+                                                </Typography>
+                                            </Box>
+                                        ) : null}
+                                    </Stack>
+                                ) : null}
+
+                                {!scanLoading && scanError && !scanResultMessage ? (
+                                    <Alert severity="error" sx={{ borderRadius: 2 }}>
+                                        {scanError}
+                                    </Alert>
+                                ) : null}
+                            </Box>
+                        )}
+                    </Stack>
+
+                    <Divider sx={{ my: 1.8, borderColor: "rgba(255,255,255,0.08)" }} />
+
+                    <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.56)" }}>
+                        Aynı irsaliye tekrar okutulursa eklenmez. Farklı bir değer okunursa mevcut alanın sonuna <b> / </b> ile eklenir.
+                    </Typography>
                 </DialogContent>
 
-                <DialogActions sx={{ px: 3, pb: 2.5 }}>
+                <DialogActions sx={{ px: 2.5, pb: 2.3, pt: 0.5 }}>
                     <Button
                         onClick={closeScanner}
                         sx={{
                             color: "rgba(255,255,255,0.78)",
-                            borderRadius: 2,
+                            borderRadius: 2.2,
+                            px: 2,
                         }}
                     >
                         Kapat
@@ -949,10 +1199,13 @@ export default function SeferDetayDrawer({
                         variant="contained"
                         onClick={handleReadTable}
                         disabled={scanLoading || !canEdit}
+                        startIcon={<DocumentScannerOutlinedIcon />}
                         sx={{
-                            borderRadius: 2,
+                            borderRadius: 2.2,
                             textTransform: "none",
-                            fontWeight: 700,
+                            fontWeight: 800,
+                            px: 2.2,
+                            boxShadow: "0 10px 24px rgba(0,0,0,0.30)",
                         }}
                     >
                         {scanLoading ? "Okunuyor..." : "Tabloyu Tara"}
