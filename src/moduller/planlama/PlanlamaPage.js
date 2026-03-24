@@ -20,8 +20,8 @@ import {
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000";
-
+const API_BASE_URL =
+    process.env.REACT_APP_API_BASE_URL || "https://bapsis-backend.onrender.com";
 function formatDateDisplay(isoDate) {
     if (!isoDate) return "";
     const [yyyy, mm, dd] = String(isoDate).split("-");
