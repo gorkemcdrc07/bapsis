@@ -1,0 +1,17 @@
+export const columns = [
+    { key: "sefer", label: "Sefer No" },
+    { key: "sevk", label: "Sevk Tarihi" },
+    { key: "musteri_adi", label: "Müşteri Adı" },
+    { key: "yukleme_yeri", label: "Yükleme Yeri" },
+    { key: "cekici", label: "Çekici" },
+    { key: "dorse", label: "Dorse" },
+    { key: "tc", label: "TC" },
+    { key: "surucu", label: "Sürücü" },
+    { key: "tel", label: "Telefon" },
+    { key: "vkn", label: "VKN" },
+    { key: "varis1", label: "Varış 1" },
+    { key: "varis2", label: "Varış 2" },
+    { key: "irsaliye", label: "İrsaliye No" },
+    { key: "navlun", label: "Navlun" },
+    { key: "arac_durumu", label: "Araç Durumu" },
+];

@@ -161,6 +161,16 @@ function BulkActionButton({ icon, label, onClick, color = "primary", disabled = 
     );
 }
 
+function formatEkranDisplayName(ekran) {
+    const kod = String(ekran?.kod || "").trim();
+    const ad = String(ekran?.ad || "").trim();
+
+    if (kod === "plakaatama") return "Plaka Atama BİM";
+    if (kod === "donus_plaka_atama") return "Dönüş Plaka Atama";
+
+    return ad || kod || "Ekran";
+}
+
 export default function YetkilerSayfasi() {
     const [permLoading, setPermLoading] = useState(true);
     const [hasAccess, setHasAccess] = useState(false);
@@ -614,7 +624,8 @@ export default function YetkilerSayfasi() {
             .filter((b) => {
                 if (!q) return true;
                 const ek = ekranById[b.ekran_id];
-                const text = `${ek?.ad || ""} ${b.ad || ""} ${b.kod || ""}`;
+                const ekranText = formatEkranDisplayName(ek);
+                const text = `${ekranText} ${ek?.ad || ""} ${b.ad || ""} ${b.kod || ""} ${ek?.grup || ""} ${ek?.kod || ""}`;
                 return norm(text).includes(q);
             })
             .filter((b) => (!onlyAllowed ? true : getEffectiveButonIzin(b.id)));
@@ -649,7 +660,7 @@ export default function YetkilerSayfasi() {
         return grupKeys.map((gr) => {
             const ekranObj = g[gr];
             const ekranList = Object.values(ekranObj).sort((a, b) =>
-                String(a.ekran?.ad || "").localeCompare(String(b.ekran?.ad || ""), "tr")
+                formatEkranDisplayName(a.ekran).localeCompare(formatEkranDisplayName(b.ekran), "tr")
             );
 
             ekranList.forEach((x) => {
@@ -673,7 +684,8 @@ export default function YetkilerSayfasi() {
                 if (!q) return true;
                 const g = gridById[k.grid_id];
                 const ek = ekranById[g?.ekran_id];
-                const text = `${ek?.ad || ""} ${g?.ad || ""} ${k.ad || ""} ${k.kod || ""}`;
+                const ekranText = formatEkranDisplayName(ek);
+                const text = `${ekranText} ${ek?.ad || ""} ${g?.ad || ""} ${k.ad || ""} ${k.kod || ""}`;
                 return norm(text).includes(q);
             })
             .filter((k) => {
@@ -719,7 +731,7 @@ export default function YetkilerSayfasi() {
             .map((grup) => {
                 const ekranMap = out[grup];
                 const ekranList = Object.values(ekranMap).sort((a, b) =>
-                    String(a.ekran?.ad || "").localeCompare(String(b.ekran?.ad || ""), "tr")
+                    formatEkranDisplayName(a.ekran).localeCompare(formatEkranDisplayName(b.ekran), "tr")
                 );
 
                 ekranList.forEach((ek) => {
@@ -1179,7 +1191,8 @@ export default function YetkilerSayfasi() {
                                         >
                                             {visibleGridler.map((g) => {
                                                 const ek = ekranById[g.ekran_id];
-                                                const label = ek ? `${ek.ad} / ${g.ad}` : g.ad;
+                                                const ekranName = formatEkranDisplayName(ek);
+                                                const label = ek ? `${ekranName} / ${g.ad}` : g.ad;
                                                 return (
                                                     <MenuItem key={g.id} value={String(g.id)}>
                                                         {label} ({g.kod})
@@ -1224,8 +1237,7 @@ export default function YetkilerSayfasi() {
                                     label={
                                         loading
                                             ? "Yükleniyor..."
-                                            : `${totalVisibleItems} ${yetkiTipi === "BUTON" ? "kayıt" : "kolon"
-                                            }`
+                                            : `${totalVisibleItems} ${yetkiTipi === "BUTON" ? "kayıt" : "kolon"}`
                                     }
                                     sx={countChipSx}
                                 />
@@ -1374,8 +1386,12 @@ export default function YetkilerSayfasi() {
                                                                             <AppsRounded sx={{ fontSize: 18 }} />
                                                                         </Avatar>
                                                                         <Box>
-                                                                            <Typography sx={groupTitleSx}>{ekran.ad}</Typography>
-                                                                            <Typography sx={groupSubSx}>{ekran.kod}</Typography>
+                                                                            <Typography sx={groupTitleSx}>
+                                                                                {formatEkranDisplayName(ekran)}
+                                                                            </Typography>
+                                                                            <Typography sx={groupSubSx}>
+                                                                                {ekran.kod}
+                                                                            </Typography>
                                                                         </Box>
                                                                     </Stack>
                                                                     <Chip
@@ -1496,7 +1512,9 @@ export default function YetkilerSayfasi() {
                                                                                 <GridViewRounded sx={{ fontSize: 18 }} />
                                                                             </Avatar>
                                                                             <Box>
-                                                                                <Typography sx={groupTitleSx}>{ekran.ad}</Typography>
+                                                                                <Typography sx={groupTitleSx}>
+                                                                                    {formatEkranDisplayName(ekran)}
+                                                                                </Typography>
                                                                                 <Stack
                                                                                     direction="row"
                                                                                     spacing={0.5}

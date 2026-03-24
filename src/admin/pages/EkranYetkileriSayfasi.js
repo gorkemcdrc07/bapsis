@@ -38,16 +38,34 @@ import { supabase } from "../../supabase";
    MENÜ
 ========================= */
 const MENU = [
-    { title: "ANA SAYFA", items: [{ kod: "anasayfa", label: "Ana Sayfa" }] },
     {
-        title: "KULLANICI İŞLEMLERİ",
+        title: "ANA SAYFA",
+        items: [{ kod: "anasayfa", label: "Ana Sayfa" }],
+    },
+
+    {
+        title: "BİM AFYON",
         items: [
-            { kod: "siparisacilis", label: "Sipariş Açılış" },
-            { kod: "plakaatama", label: "Plaka Atama" },
-            { kod: "tamamlanan_seferler", label: "Tamamlanan Seferler" },
+            { kod: "siparisacilis", label: "Bim Sipariş Açılış" },
+            { kod: "plakaatama", label: "Bim Plaka Atama" },
+            { kod: "tamamlanan_seferler", label: "Bim Tamamlanan Seferler" },
         ],
     },
-    { title: "ARAÇ YÖNETİMİ", items: [{ kod: "aracbilgileri", label: "Araç Bilgileri" }] },
+
+    {
+        title: "DÖNÜŞLER",
+        items: [
+            { kod: "donus_siparis_acilis", label: "Dönüş Sipariş Açılış" },
+            { kod: "donus_plaka_atama", label: "Dönüş Plaka Atama" },
+            { kod: "donus_tamamlanan_seferler", label: "Dönüş Tamamlanan Seferler" },
+            { kod: "donus_navlunlar", label: "Navlunlar" },
+        ],
+    },
+    {
+        title: "ARAÇ YÖNETİMİ",
+        items: [{ kod: "aracbilgileri", label: "Araç Bilgileri" }],
+    },
+
     {
         title: "YENİ KAYITLAR",
         items: [
@@ -77,8 +95,9 @@ export default function EkranYetkileriSayfasi() {
             .normalize("NFD")
             .replace(/\p{Diacritic}/gu, "");
 
-    const fetchAll = async () => {
+    const fetchAll = useCallback(async () => {
         setLoading(true);
+
         try {
             const [eRes, uRes, ueRes] = await Promise.all([
                 supabase.from("ekranlar").select("id,kod").eq("aktif", true),
@@ -121,11 +140,11 @@ export default function EkranYetkileriSayfasi() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [kullaniciId]);
 
     useEffect(() => {
         fetchAll();
-    }, []);
+    }, [fetchAll]);
 
     const selectedUser = useMemo(
         () => kullanicilar.find((x) => x.id === kullaniciId),

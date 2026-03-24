@@ -18,6 +18,15 @@ import VknEkle from "./yeniKayitlar/vknEkle";
 import UgramaSartiEkle from "./yeniKayitlar/UgramaSartiEkle";
 import NavlunSartiEkle from "./yeniKayitlar/navlunSartiEkle";
 
+// Dönüşler
+import DonusSiparisOlustur from "./donusler/SiparisOlustur";
+import DonusPlakaAtama from "./donusler/PlakaAtama";
+import DonusTamamlananSeferler from "./donusler/TamamlananSeferler";
+import Navlunlar from "./donusler/Navlunlar";
+
+// Planlama
+import PlanlamaPage from "./moduller/planlama/PlanlamaPage";
+
 // Admin
 import AdminRoutes from "./admin/AdminRoutes";
 import { MemoryRouter } from "react-router-dom";
@@ -57,6 +66,7 @@ export default function App() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [sayfa, setSayfa] = useState("anasayfa");
     const [aktifBatchId, setAktifBatchId] = useState(null);
+    const [aktifDonusBatchId, setAktifDonusBatchId] = useState(null);
 
     const components = useMemo(
         () => ({
@@ -71,6 +81,11 @@ export default function App() {
             VknEkle,
             UgramaSartiEkle,
             NavlunSartiEkle,
+            DonusSiparisOlustur,
+            DonusPlakaAtama,
+            DonusTamamlananSeferler,
+            Navlunlar,
+            PlanlamaPage,
             AdminRoutes,
             MemoryRouter,
         }),
@@ -147,6 +162,7 @@ export default function App() {
         setAllowedScreens(new Set());
         setAllowedButtons(new Set());
         setAktifBatchId(null);
+        setAktifDonusBatchId(null);
         setSayfa("anasayfa");
     }, []);
 
@@ -158,6 +174,8 @@ export default function App() {
 
     const pageMap = {
         anasayfa: <Anasayfa kullanici={oturum} />,
+
+        planlama: <PlanlamaPage />,
 
         siparisacilis: (
             <SiparisAcilis
@@ -172,6 +190,30 @@ export default function App() {
         plakaatama: <PlakaAtama kullanici={oturum} batchId={aktifBatchId} />,
 
         tamamlanan_seferler: <TamamlananSeferler batchId={aktifBatchId} />,
+
+        // DÖNÜŞLER
+        donus_siparis_acilis: (
+            <DonusSiparisOlustur
+                kullanici={oturum}
+                onOnayla={({ batchId }) => {
+                    setAktifDonusBatchId(batchId || null);
+                    setSayfa("donus_plaka_atama");
+                }}
+            />
+        ),
+
+        donus_plaka_atama: (
+            <DonusPlakaAtama
+                kullanici={oturum}
+                batchId={aktifDonusBatchId}
+            />
+        ),
+
+        donus_tamamlanan_seferler: (
+            <DonusTamamlananSeferler batchId={aktifDonusBatchId} />
+        ),
+
+        donus_navlunlar: <Navlunlar kullanici={oturum} />,
 
         aracbilgileri: <AracBilgileri />,
 
@@ -219,7 +261,14 @@ export default function App() {
                 allowedScreens={allowedScreens}
             />
 
-            <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <Box
+                sx={{
+                    flexGrow: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    minWidth: 0,
+                }}
+            >
                 <Navbar
                     kullanici={oturum}
                     onCikis={cikisYap}

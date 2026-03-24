@@ -1,4 +1,3 @@
-// src/plakaAtama/PlakaAtamaGrid.js
 import React, {
     memo,
     useLayoutEffect,
@@ -24,14 +23,15 @@ import {
     LocalShipping as TruckIcon,
     SyncAlt as SwapIcon,
     ReceiptLong as VknIcon,
-    MoreHoriz as MoreIcon,
+    MoreVert as MoreIcon,
+    KeyboardReturn as ReturnIcon,
 } from "@mui/icons-material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { FixedSizeList, areEqual } from "react-window";
 
 const CHECK_COL_W = 54;
 const INDEX_COL_W = 56;
-const ICON_COL_W = 132;
+const ICON_COL_W = 176;
 const MORE_COL_W = 64;
 const ROW_H = 88;
 const HEADER_H = 54;
@@ -44,29 +44,27 @@ const LISTBOX_FIELDS = new Set([
     "surucu",
     "vkn",
     "arac_durumu",
-    "peron_no",
 ]);
 
 const onlyDigits = (value) => String(value ?? "").replace(/\D+/g, "");
 
 const checkboxSx = {
-    color: "rgba(255,255,255,0.32)",
-    "&.Mui-checked": { color: "#7aa2ff" },
+    color: "rgba(255,255,255,0.35)",
+    "&.Mui-checked": { color: "rgba(120,160,255,0.95)" },
 };
 
 const headerCheckboxSx = {
-    color: "rgba(255,255,255,0.32)",
-    "&.Mui-checked": { color: "#7aa2ff" },
-    "&.MuiCheckbox-indeterminate": { color: "#7aa2ff" },
+    color: "rgba(255,255,255,0.35)",
+    "&.Mui-checked": { color: "rgba(120,160,255,0.95)" },
+    "&.MuiCheckbox-indeterminate": { color: "rgba(120,160,255,0.95)" },
 };
 
 const copyButtonSx = {
-    color: "rgba(255,255,255,0.66)",
-    p: 0.55,
+    color: "rgba(255,255,255,0.72)",
+    p: 0.5,
     flexShrink: 0,
-    borderRadius: 2,
     "&:hover": {
-        color: "#fff",
+        color: "rgba(255,255,255,0.95)",
         background: "rgba(255,255,255,0.08)",
     },
 };
@@ -80,21 +78,9 @@ const indexBadgeSx = {
     fontSize: 12,
     fontWeight: 900,
     color: "rgba(255,255,255,0.88)",
-    background: "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
+    background: "rgba(255,255,255,0.06)",
     border: "1px solid rgba(255,255,255,0.10)",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
     userSelect: "none",
-};
-
-const readonlyCellSx = {
-    px: 1.2,
-    py: 1.1,
-    fontSize: 13,
-    fontWeight: 650,
-    color: "rgba(255,255,255,0.84)",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
 };
 
 const TextCell = memo(
@@ -102,7 +88,20 @@ const TextCell = memo(
         const v = String(value ?? "").trim();
 
         return (
-            <Typography sx={readonlyCellSx} title={v} noWrap>
+            <Typography
+                sx={{
+                    px: 1.2,
+                    py: 1.1,
+                    fontSize: 13,
+                    fontWeight: 650,
+                    color: "rgba(255,255,255,0.82)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                }}
+                title={v}
+                noWrap
+            >
                 {v || "—"}
             </Typography>
         );
@@ -118,12 +117,11 @@ const ClickableCell = memo(
             <Box
                 onClick={disabled ? undefined : onClick}
                 sx={{
-                    px: 1.15,
-                    py: 1.05,
-                    borderRadius: "12px",
+                    px: 1.2,
+                    py: 1.15,
+                    borderRadius: 2,
                     border: "1px solid rgba(255,255,255,0.08)",
-                    background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
+                    background: "rgba(255,255,255,0.03)",
                     color: "rgba(255,255,255,0.92)",
                     fontSize: 13,
                     fontWeight: 800,
@@ -131,16 +129,8 @@ const ClickableCell = memo(
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     cursor: disabled ? "default" : "pointer",
-                    opacity: disabled ? 0.7 : 1,
+                    opacity: disabled ? 0.72 : 1,
                     minWidth: 0,
-                    transition: "all .18s ease",
-                    "&:hover": disabled
-                        ? undefined
-                        : {
-                            borderColor: "rgba(122,162,255,0.26)",
-                            background:
-                                "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.04))",
-                        },
                 }}
                 title={v}
             >
@@ -167,19 +157,15 @@ const VknCopyCell = memo(
         return (
             <Box
                 sx={{
-                    px: 0.4,
+                    px: 0.5,
                     display: "flex",
                     alignItems: "center",
-                    gap: 0.45,
+                    gap: 0.5,
                     minWidth: 0,
                 }}
             >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <ClickableCell
-                        value={raw}
-                        onClick={onClick}
-                        disabled={disabled}
-                    />
+                    <ClickableCell value={raw} onClick={onClick} disabled={disabled} />
                 </Box>
 
                 <IconButton
@@ -234,21 +220,15 @@ const Row = memo(
         const readOnlyAll = !data.canEdit || !data.onChange;
         const canOpenSwap = !!data.canEdit && !!data.onOpenSwap;
         const canOpenVkn = !!data.canEdit && !!data.onOpenVkn;
+        const canOpenIade = !!data.canEdit && !!data.onOpenIade;
 
         return (
             <div style={style}>
-                <Box sx={{ px: 0.5, py: 0.45 }}>
+                <Box sx={{ px: 0.5, py: 0.5 }}>
                     <Card sx={data.rowCardBase}>
                         <Stack direction="row" alignItems="center" sx={{ height: "100%" }}>
                             {hasSelection ? (
-                                <Box
-                                    sx={{
-                                        width: CHECK_COL_W,
-                                        flexShrink: 0,
-                                        display: "flex",
-                                        justifyContent: "center",
-                                    }}
-                                >
+                                <Box sx={{ width: CHECK_COL_W, flexShrink: 0, display: "flex", justifyContent: "center" }}>
                                     <Checkbox
                                         checked={!!checked}
                                         onChange={() => data.onToggleRow?.(row.id)}
@@ -257,14 +237,7 @@ const Row = memo(
                                 </Box>
                             ) : null}
 
-                            <Box
-                                sx={{
-                                    width: INDEX_COL_W,
-                                    flexShrink: 0,
-                                    display: "flex",
-                                    justifyContent: "center",
-                                }}
-                            >
+                            <Box sx={{ width: INDEX_COL_W, flexShrink: 0, display: "flex", justifyContent: "center" }}>
                                 <Box sx={indexBadgeSx} title={`Satır ${index + 1}`}>
                                     {no}
                                 </Box>
@@ -279,78 +252,73 @@ const Row = memo(
                                     position: "relative",
                                 }}
                             >
-                                <Box
-                                    sx={
-                                        typeof s?.rowGlow === "function"
-                                            ? s.rowGlow(row.tc ? "ok" : "warn")
-                                            : undefined
-                                    }
-                                />
+                                <Box sx={typeof s?.rowGlow === "function" ? s.rowGlow(row.tc ? "ok" : "warn") : undefined} />
 
-                                <Stack
-                                    direction="row"
-                                    spacing={0.75}
-                                    alignItems="center"
-                                    justifyContent="center"
-                                >
+                                <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
                                     <IconButton
                                         onClick={() => data.onOpenDetails?.(row.id)}
-                                        sx={data.actionIconBtn}
-                                        title="Detay"
+                                        sx={s.iconBtnRound}
+                                        title="Sefer detay"
                                         disableRipple
                                         disabled={!data.onOpenDetails}
                                     >
-                                        <Avatar sx={data.actionAvatarPrimary}>
-                                            <TruckIcon sx={data.actionIcon} />
+                                        <Avatar sx={s.avatarMain}>
+                                            <TruckIcon sx={s.iconMain} />
                                         </Avatar>
                                     </IconButton>
 
                                     <IconButton
                                         onClick={() => data.onOpenSwap?.(row.id)}
-                                        sx={data.actionIconBtn}
+                                        sx={s.iconBtnRound}
                                         title={data.canEdit ? "Şoför değiştir" : "Yetkisiz"}
                                         disableRipple
                                         disabled={!canOpenSwap}
                                     >
-                                        <Avatar sx={data.actionAvatarSoft}>
-                                            <SwapIcon sx={data.actionIcon} />
+                                        <Avatar sx={s.avatarMain}>
+                                            <SwapIcon sx={s.iconMain} />
                                         </Avatar>
                                     </IconButton>
 
                                     <IconButton
                                         onClick={() => data.onOpenVkn?.(row.id)}
-                                        sx={data.actionIconBtn}
+                                        sx={s.iconBtnRound}
                                         title={data.canEdit ? "VKN değiştir" : "Yetkisiz"}
                                         disableRipple
                                         disabled={!canOpenVkn}
                                     >
-                                        <Avatar sx={data.actionAvatarSoft}>
-                                            <VknIcon sx={data.actionIcon} />
+                                        <Avatar sx={s.avatarMain}>
+                                            <VknIcon sx={s.iconMain} />
+                                        </Avatar>
+                                    </IconButton>
+
+                                    <IconButton
+                                        onClick={() => data.onOpenIade?.(row.id)}
+                                        sx={s.iconBtnRound}
+                                        title={data.canEdit ? "İade oluştur" : "Yetkisiz"}
+                                        disableRipple
+                                        disabled={!canOpenIade}
+                                    >
+                                        <Avatar
+                                            sx={{
+                                                ...(s.avatarMain || {}),
+                                                bgcolor: "rgba(250,204,21,0.16)",
+                                                color: "#facc15",
+                                                border: "1px solid rgba(250,204,21,0.28)",
+                                            }}
+                                        >
+                                            <ReturnIcon sx={s.iconMain} />
                                         </Avatar>
                                     </IconButton>
                                 </Stack>
                             </Box>
 
                             {columns.map((col) => {
+                                const val = row[col.key] ?? "";
                                 const keyName = String(col.key).trim();
-                                const rawVal = row[col.key] ?? "";
-
-                                let displayVal = rawVal;
-                                if (keyName === "peron_giris_tarihi" && rawVal) {
-                                    try {
-                                        displayVal = new Date(rawVal).toLocaleString("tr-TR");
-                                    } catch (_) {
-                                        displayVal = rawVal;
-                                    }
-                                }
-
                                 const isReadonly = keyName === "guncellendi";
 
                                 const editableSet = data.editableColumnSet;
-                                const canEditThisColumn =
-                                    editableSet == null
-                                        ? col.editable !== false
-                                        : editableSet.has(keyName) && col.editable !== false;
+                                const canEditThisColumn = editableSet == null ? true : editableSet.has(keyName);
 
                                 const cellReadOnly = isReadonly || readOnlyAll || !canEditThisColumn;
                                 const isListboxField = LISTBOX_FIELDS.has(keyName);
@@ -361,7 +329,7 @@ const Row = memo(
                                     return (
                                         <Box key={col.key} sx={{ width: col.w, px: 0.5, flexShrink: 0 }}>
                                             <VknCopyCell
-                                                value={rawVal}
+                                                value={val}
                                                 onCopy={data.copyDigitsToClipboard}
                                                 onClick={
                                                     listboxActive
@@ -378,7 +346,7 @@ const Row = memo(
                                     return (
                                         <Box key={col.key} sx={{ width: col.w, px: 0.5, flexShrink: 0 }}>
                                             <ClickableCell
-                                                value={displayVal}
+                                                value={val}
                                                 onClick={
                                                     listboxActive
                                                         ? (e) => data.onOpenListbox?.(e, row.id, col.key)
@@ -393,13 +361,11 @@ const Row = memo(
                                 return (
                                     <Box key={col.key} sx={{ width: col.w, px: 0.5, flexShrink: 0 }}>
                                         {cellReadOnly ? (
-                                            <TextCell value={displayVal} />
+                                            <TextCell value={val} />
                                         ) : (
                                             <EditableInputCell
-                                                value={rawVal}
-                                                onChange={(e) =>
-                                                    data.onChange?.(row.id, col.key, e.target.value)
-                                                }
+                                                value={val}
+                                                onChange={(e) => data.onChange?.(row.id, col.key, e.target.value)}
                                                 sx={data.gridInputBase}
                                             />
                                         )}
@@ -407,15 +373,8 @@ const Row = memo(
                                 );
                             })}
 
-                            <Box
-                                sx={{
-                                    width: MORE_COL_W,
-                                    display: "flex",
-                                    justifyContent: "center",
-                                    flexShrink: 0,
-                                }}
-                            >
-                                <IconButton size="small" sx={data.moreBtn} disabled>
+                            <Box sx={{ width: MORE_COL_W, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+                                <IconButton size="small" sx={s.iconBtn} disabled>
                                     <MoreIcon />
                                 </IconButton>
                             </Box>
@@ -428,7 +387,7 @@ const Row = memo(
     areEqual
 );
 
-function PlakaAtamaGrid({
+function DonusPlakaAtamaGrid({
     rows,
     columns,
     s,
@@ -436,6 +395,7 @@ function PlakaAtamaGrid({
     onOpenDetails,
     onOpenSwap,
     onOpenVkn,
+    onOpenIade,
     onOpenListbox,
     onChange,
     selectedIds,
@@ -541,99 +501,25 @@ function PlakaAtamaGrid({
 
     const rowCardBase = useMemo(() => {
         return {
-            background:
-                "linear-gradient(180deg, rgba(12,18,38,0.96) 0%, rgba(10,16,34,0.96) 100%)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            borderRadius: "18px",
+            background: "rgba(12,18,38,0.96)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: "16px",
             m: 0,
             height: ROW_H - 8,
             pointerEvents: "auto",
-            boxShadow:
-                "0 10px 24px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.03)",
-            backdropFilter: "blur(10px)",
-            transition: "all .18s ease",
-            "&:hover": {
-                borderColor: "rgba(255,255,255,0.10)",
-                boxShadow:
-                    "0 14px 28px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.04)",
-            },
+            boxShadow: "none",
+            backdropFilter: "none",
         };
     }, []);
 
     const gridInputBase = useMemo(() => {
         return {
             ...s.gridInput,
-            minHeight: 42,
-            px: 1.1,
-            borderRadius: "12px",
-            background:
-                "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
-            border: "1px solid rgba(255,255,255,0.07)",
             fontWeight: 750,
-            color: "rgba(255,255,255,0.92)",
-            transition: "all .15s ease",
-            "& input": {
-                color: "rgba(255,255,255,0.92)",
-                py: 0.7,
-            },
-            "&:hover": {
-                borderColor: "rgba(255,255,255,0.10)",
-                background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.03))",
-            },
-            "&:focus-within": {
-                borderColor: "rgba(122,162,255,0.28)",
-                boxShadow: "0 0 0 3px rgba(59,130,246,0.10)",
-            },
+            color: "rgba(255,255,255,0.9)",
+            "& input": { color: "rgba(255,255,255,0.9)" },
         };
     }, [s]);
-
-    const actionIconBtn = useMemo(() => {
-        return {
-            p: 0.25,
-            borderRadius: "14px",
-            transition: "transform .18s ease, opacity .18s ease",
-            "&:hover": {
-                transform: "translateY(-1px)",
-            },
-        };
-    }, []);
-
-    const actionAvatarPrimary = useMemo(() => {
-        return {
-            width: 34,
-            height: 34,
-            background: "linear-gradient(135deg, #3b82f6, #2563eb)",
-            borderRadius: "12px",
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 10px 20px rgba(37,99,235,0.20)",
-        };
-    }, []);
-
-    const actionAvatarSoft = useMemo(() => {
-        return {
-            width: 34,
-            height: 34,
-            background:
-                "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
-            borderRadius: "12px",
-            border: "1px solid rgba(255,255,255,0.10)",
-            color: "#dbe7ff",
-        };
-    }, []);
-
-    const actionIcon = useMemo(() => {
-        return {
-            fontSize: 18,
-        };
-    }, []);
-
-    const moreBtn = useMemo(() => {
-        return {
-            color: "rgba(255,255,255,0.36)",
-            borderRadius: 2,
-        };
-    }, []);
 
     const copyDigitsToClipboard = useCallback(async (value) => {
         const digits = onlyDigits(value);
@@ -672,6 +558,7 @@ function PlakaAtamaGrid({
             onOpenDetails,
             onOpenSwap,
             onOpenVkn,
+            onOpenIade,
             onOpenListbox,
             onChange,
             rowCardBase,
@@ -681,11 +568,6 @@ function PlakaAtamaGrid({
             canEdit,
             editableColumnSet,
             copyDigitsToClipboard,
-            actionIconBtn,
-            actionAvatarPrimary,
-            actionAvatarSoft,
-            actionIcon,
-            moreBtn,
         }),
         [
             rows,
@@ -694,6 +576,7 @@ function PlakaAtamaGrid({
             onOpenDetails,
             onOpenSwap,
             onOpenVkn,
+            onOpenIade,
             onOpenListbox,
             onChange,
             rowCardBase,
@@ -704,11 +587,6 @@ function PlakaAtamaGrid({
             canEdit,
             editableColumnSet,
             copyDigitsToClipboard,
-            actionIconBtn,
-            actionAvatarPrimary,
-            actionAvatarSoft,
-            actionIcon,
-            moreBtn,
         ]
     );
 
@@ -762,50 +640,26 @@ function PlakaAtamaGrid({
     const copyToast = copyToastRef.current;
 
     return (
-        <Box
-            sx={{
-                ...s.gridContainer,
-                background: "transparent",
-            }}
-        >
-            <Box
-                ref={wrapRef}
-                sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
-            >
+        <Box sx={s.gridContainer}>
+            <Box ref={wrapRef} sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                 {!loading && rows.length === 0 ? (
-                    <Box
-                        sx={{
-                            p: 3,
-                            borderRadius: 3,
-                            border: "1px solid rgba(255,255,255,0.07)",
-                            background:
-                                "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))",
-                        }}
-                    >
-                        <Typography sx={{ color: "rgba(255,255,255,0.64)", fontWeight: 600 }}>
+                    <Box sx={{ p: 3 }}>
+                        <Typography sx={{ color: "rgba(255,255,255,0.6)" }}>
                             Gösterilecek kayıt bulunamadı.
                         </Typography>
                     </Box>
                 ) : (
                     <Box sx={{ flex: 1, minHeight: 0, overflowX: "auto", overflowY: "hidden" }}>
-                        <Box
-                            sx={{
-                                width: totalWidth,
-                                height: "100%",
-                                display: "flex",
-                                flexDirection: "column",
-                            }}
-                        >
+                        <Box sx={{ width: totalWidth, height: "100%", display: "flex", flexDirection: "column" }}>
                             <Box
                                 sx={{
                                     position: "sticky",
                                     top: 0,
                                     zIndex: 5,
-                                    bgcolor: "rgba(8,12,28,0.82)",
+                                    bgcolor: "rgba(8,12,28,0.92)",
                                     borderBottom: "1px solid rgba(255,255,255,0.06)",
                                     flexShrink: 0,
                                     height: HEADER_H,
-                                    backdropFilter: "blur(10px)",
                                 }}
                             >
                                 <Stack direction="row" sx={s.headerRow}>
@@ -830,24 +684,8 @@ function PlakaAtamaGrid({
                                         </Box>
                                     ) : null}
 
-                                    <Box
-                                        sx={{
-                                            width: INDEX_COL_W,
-                                            px: 1,
-                                            flexShrink: 0,
-                                            display: "flex",
-                                            alignItems: "center",
-                                        }}
-                                    >
-                                        <Typography
-                                            sx={{
-                                                ...s.colTitle,
-                                                opacity: 0.9,
-                                                fontWeight: 800,
-                                            }}
-                                        >
-                                            #
-                                        </Typography>
+                                    <Box sx={{ width: INDEX_COL_W, px: 1, flexShrink: 0, display: "flex", alignItems: "center" }}>
+                                        <Typography sx={{ ...s.colTitle, opacity: 0.9 }}>#</Typography>
                                     </Box>
 
                                     <Box sx={{ width: ICON_COL_W, flexShrink: 0 }} />
@@ -890,7 +728,7 @@ function PlakaAtamaGrid({
                                                         transform: "translateX(-50%)",
                                                         width: 2,
                                                         borderRadius: 999,
-                                                        background: "#7aa2ff",
+                                                        background: "rgba(120,160,255,0.95)",
                                                         opacity: 0.25,
                                                         transition: "opacity 0.15s ease",
                                                     },
@@ -946,4 +784,4 @@ function PlakaAtamaGrid({
     );
 }
 
-export default memo(PlakaAtamaGrid);
+export default memo(DonusPlakaAtamaGrid);

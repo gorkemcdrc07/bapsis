@@ -1,17 +1,14 @@
-// src/sayfalar/plakaatama.js
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../supabase";
 
 import SeferDetayDrawer from "../plakaAtama/SeferDetayDrawer";
 import SoforSwapDialog from "../plakaAtama/SoforSwapDialog";
-import PlakaAtamaGrid from "../plakaAtama/PlakaAtamaGrid";
-
+import DonusPlakaAtamaGrid from "../plakaAtama/DonusPlakaAtamaGrid";
+import { columns } from "../plakaAtama/donusPlakaAtama.columns";
 import { s } from "../plakaAtama/plakaAtama.styles";
-import { columns } from "../plakaAtama/plakaAtama.columns";
 
-// ✅ IMPORTANT: uzantıyı .js ver (asset'e resolve olmasın diye)
 import VknDegistirme from "../plakaAtama/vknDegistirme.js";
-import Analizler from "../plakaAtama/Analizler";
+import IadeOlusturDialog from "../plakaAtama/IadeOlusturDialog";
 
 import {
     Box,
@@ -38,47 +35,42 @@ import {
     Save as SaveIcon,
     FileDownload as FileDownloadIcon,
     Search as SearchIcon,
+    Timeline as TimelineIcon,
     Refresh as RefreshIcon,
     DoneAll as DoneAllIcon,
     DeleteOutline as DeleteOutlineIcon,
     Clear as ClearIcon,
+    KeyboardReturn as KeyboardReturnIcon,
 } from "@mui/icons-material";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 
-// ✅ Excel export için
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
-// ✅ navlun rules / typing engine
-import { toNumber } from "../plakaAtama/navlunRules";
-import { useNavlunTypingDiscount } from "../plakaAtama/useNavlunEngine";
-
+const DATA_TABLE = "donusler_plaka_atama";
 
 /* =========================================================
    ✅ YETKİ SİSTEMİ (Ekran + Buton + Grid Kolon)
 ========================================================= */
-const EKRAN_KOD = "plakaatama";
-const GRID_KOD = "main";
+const EKRAN_KOD = "donus_plaka_atama";
+const GRID_KOD = "donus_grid";
 
 const BTN = {
-    SAVE: "plakaatama.save",
-    EXPORT: "plakaatama.export_excel",
-    REFRESH: "plakaatama.refresh",
-    COMPLETE_SELECTED: "plakaatama.complete_selected",
-    DELETE_SELECTED: "plakaatama.delete_selected",
+    SAVE: "donusler.plakaatama.save",
+    EXPORT: "donusler.plakaatama.export_excel",
+    REFRESH: "donusler.plakaatama.refresh",
+    COMPLETE_SELECTED: "donusler.plakaatama.complete_selected",
+    DELETE_SELECTED: "donusler.plakaatama.delete_selected",
 
-    // satır aksiyonları
-    ROW_EDIT: "plakaatama.row.edit",
-    ROW_OPEN_DETAILS: "plakaatama.row.open_details",
-    ROW_SWAP_DRIVER: "plakaatama.row.swap_driver",
-    ROW_OPEN_VKN: "plakaatama.row.open_vkn",
-    ROW_OPEN_LISTBOX: "plakaatama.row.open_listbox",
+    ROW_EDIT: "donusler.plakaatama.row.edit",
+    ROW_OPEN_DETAILS: "donusler.plakaatama.row.open_details",
+    ROW_SWAP_DRIVER: "donusler.plakaatama.row.swap_driver",
+    ROW_OPEN_VKN: "donusler.plakaatama.row.open_vkn",
+    ROW_OPEN_LISTBOX: "donusler.plakaatama.row.open_listbox",
+    ROW_CREATE_IADE: "donusler.plakaatama.row.create_iade",
 };
-
-const ARAC_DURUMU_OPTIONS = ["TESİSTE", "SAAT EKLE"];
-
-const PERON_OPTIONS = Array.from({ length: 60 }, (_, i) => `${i + 1}.PERON`);
+const ARAC_DURUMU_OPTIONS = ["DEPODA", "SAAT EKLE"];
 
 async function fetchEkranIdByKod({ supabase, ekranKod }) {
     const { data, error } = await supabase
@@ -154,9 +146,6 @@ async function fetchButtonMaps({ supabase, ekranId, userId, roleId }) {
     return kodIzin;
 }
 
-/* =========================
-   ✅ GRID / KOLON PERMS
-========================= */
 async function fetchGridIdByEkran({ supabase, ekranId, gridKod }) {
     const { data, error } = await supabase
         .from("ekran_gridler")
@@ -226,7 +215,6 @@ async function fetchEffectiveGridKolonPerms({ supabase, gridId, userId, roleId }
     return byKod;
 }
 
-// ✅ küçük debounce hook
 function useDebouncedValue(value, delayMs = 120) {
     const [deb, setDeb] = useState(value);
     useEffect(() => {
@@ -242,13 +230,11 @@ function chunkArray(arr, size) {
     return out;
 }
 
-export default function PlakaAtamaPremiumGrid({ batchId = null }) {
+export default function PlakaAtamaPremiumGrid() {
     const theme = useTheme();
     const isTablet = useMediaQuery("(max-width:1200px)");
     const isMobile = useMediaQuery("(max-width:768px)");
-    /* =========================
-       ✅ PERMISSION STATE
-    ========================= */
+
     const [permLoading, setPermLoading] = useState(true);
     const [perm, setPerm] = useState({
         ekranGorunur: false,
@@ -354,23 +340,19 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
     const visibleColumnKeys = useMemo(() => {
         const hasAny = colPerms && Object.keys(colPerms).length > 0;
-
-        // hiç izin gelmediyse tüm kolonları göster
-        if (!hasAny) return columns.filter((c) => c.editable !== false).map((c) => c.key);
+        if (!hasAny) return columns.map((c) => c.key);
 
         return columns
             .filter((c) => {
                 const p = colPerms[c.key];
-
-                // izin kaydı yoksa varsayılan görünür olsun
                 if (!p) return true;
-
                 if (p.aktif === false) return false;
                 if (p.gorebilir === false) return false;
                 return true;
             })
             .map((c) => c.key);
     }, [colPerms]);
+
     const responsiveVisibleColumnKeys = useMemo(() => {
         let keys = visibleColumnKeys;
 
@@ -396,7 +378,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 "guncellendi",
                 "teslimat",
                 "datalogerno",
-                "peron_no",
                 "arac_durumu",
             ]);
             keys = keys.filter((key) => !mobileHidden.has(key));
@@ -406,27 +387,16 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     }, [visibleColumnKeys, isTablet, isMobile]);
 
     const editableColumnKeys = useMemo(() => {
-        const forcedListboxFields = new Set([
-            "cekici",
-            "surucu",
-            "vkn",
-            "arac_durumu",
-            "peron_no",
-        ]);
+        const forcedListboxFields = new Set(["cekici", "surucu", "vkn", "arac_durumu"]);
         const hasAny = colPerms && Object.keys(colPerms).length > 0;
 
-        // hiç izin gelmediyse tüm kolonlar editable olsun
         if (!hasAny) return columns.map((c) => c.key);
 
         return columns
             .filter((c) => {
                 if (forcedListboxFields.has(String(c.key).trim())) return true;
-
                 const p = colPerms[c.key];
-
-                // izin kaydı yoksa varsayılan düzenlenebilir olsun
                 if (!p) return true;
-
                 if (p.aktif === false) return false;
                 if (p.gorebilir === false) return false;
                 if (p.duzenleyebilir !== true) return false;
@@ -435,8 +405,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             .map((c) => c.key);
     }, [colPerms]);
 
-    const NAVLUN_TYPING_DELAY_MS = 1500;
-    const RECOMPUTE_DELAY_MS = 900;
     const AUTO_SAVE_DELAY_MS = 1500;
 
     const [q, setQ] = useState("");
@@ -445,6 +413,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [selectedRowId, setSelectedRowId] = useState(null);
+    const [filterMissingPlate, setFilterMissingPlate] = useState(false);
 
     const [rows, setRows] = useState([]);
     const rowsRef = useRef([]);
@@ -458,6 +427,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         rows.forEach((r, i) => m.set(r.id, i));
         rowIndexRef.current = m;
     }, [rows]);
+
     useEffect(() => {
         const prevHtmlOverflow = document.documentElement.style.overflow;
         const prevBodyOverflow = document.body.style.overflow;
@@ -507,6 +477,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         sourcePlaka: null,
     });
 
+    const [iadeDlg, setIadeDlg] = useState({
+        open: false,
+        rowId: null,
+    });
+
     const [saving, setSaving] = useState(false);
     const [autoSaving, setAutoSaving] = useState(false);
     const [lastAutoSaveAt, setLastAutoSaveAt] = useState(null);
@@ -528,14 +503,11 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         setVknDlg({ open: false, rowId: null });
     }, []);
 
-    const { scheduleNavlunDiscount } = useNavlunTypingDiscount({ rowsRef, setRows });
-
     const normPlate = useCallback(
         (v) => String(v ?? "").toUpperCase().replace(/\s+/g, "").replace(/[-._]/g, "").trim(),
         []
     );
     const normDigits = useCallback((v) => String(v ?? "").replace(/\D/g, "").trim(), []);
-
     const normalizeSearchText = useCallback((v) => {
         return String(v ?? "")
             .toLocaleLowerCase("tr-TR")
@@ -544,95 +516,42 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             .trim();
     }, []);
 
-    const FILO_VKN_SET = useMemo(
-        () =>
-            new Set([
-                "ÖZMAL",
-                "YEDEK SÜRÜCÜ",
-                "23413634938-İSMET GÜMÜŞOĞLU",
-                "NİSAN-6311415717",
-                "ŞERİFOĞLU-8100823884",
-            ]),
-        []
-    );
-
-    const normalizeFiloVknText = useCallback((v) => {
-        return String(v ?? "")
-            .trim()
-            .toLocaleUpperCase("tr-TR")
-            .replace(/\s+/g, " ");
-    }, []);
-
-    const isDirectFiloVkn = useCallback(
-        (vkn) => {
-            return FILO_VKN_SET.has(normalizeFiloVknText(vkn));
-        },
-        [FILO_VKN_SET, normalizeFiloVknText]
-    );
-
-    const normalizeVarisBase = useCallback((v) => {
-        return String(v ?? "")
-            .trim()
-            .toLocaleLowerCase("tr-TR")
-            .replace(/\s+/g, " ")
-            .replace(/-\s*\d+\s*$/, "") // sondaki -1, -2, -3 kaldır
-            .trim();
-    }, []);
-
-    const normalizeStopName = useCallback((v) => {
-        return String(v ?? "")
-            .trim()
-            .toLocaleUpperCase("tr-TR")
-            .replace(/\s+/g, " ")
-            .replace(/-\s*\d+\s*$/, "") // sondaki -1, -2, -3 kaldır
-            .trim();
-    }, []);
     const mapDbToRow = useCallback((r) => {
-        const id = r?.id ?? `${r?.batch_id ?? "batch"}_${r?.line_no ?? Math.random()}`;
-        const nav = r?.navlun ?? "";
+        const id = r?.id ?? `row_${Math.random()}`;
 
         return {
             id,
 
-            sefer: r?.seferno ?? "",
-            sevk: r?.sevktarihi ?? "",
+            sefer: r?.sefer_no ?? "",
+            sevk: r?.sevk_tarihi ?? "",
+
+            musteri_adi: r?.musteri_adi ?? "",
+            yukleme_yeri: r?.yukleme_yeri ?? "",
 
             cekici: r?.cekici ?? "",
             dorse: r?.dorse ?? "",
             tc: r?.tc ?? "",
             surucu: r?.surucu ?? "",
             tel: r?.telefon ?? "",
-            vkn: r?.faturavkn ?? "",
+            vkn: r?.vkn ?? "",
 
             arac_durumu: r?.arac_durumu ?? "",
-            peron_no: r?.peron_no ?? "",
-
-            peron_giren_user_id: r?.peron_giren_user_id ?? null,
-            peron_giren_user_name: r?.peron_giren_user_name ?? "",
-            peron_giren_user_email: r?.peron_giren_user_email ?? "",
-            peron_giris_tarihi: r?.peron_giris_tarihi ?? null,
 
             varis1: r?.varis1 ?? "",
             varis2: r?.varis2 ?? "",
-            varis3: r?.varis3 ?? "",
+            varis3: "",
 
-            datalogerno: r?.datalogerno ?? "",
-
+            datalogerno: "",
             irsaliye: r?.irsaliyeno ?? "",
-            navlun: nav,
+            navlun: r?.navlun ?? "",
 
-            teslimat: r?.teslimattarihsaat ?? "",
+            teslimat: "",
+            guncellendi: r?.created_at ?? "",
 
-            guncellendi: r?.updated_at ?? "",
-
-            __navlunBase: nav,
-            __datalogerDiscountApplied: false,
-
-            __batch_id: r?.batch_id ?? null,
-            __line_no: r?.line_no ?? null,
             __db_id: r?.id ?? null,
         };
     }, []);
+
     const ROW_PAGE = 800;
 
     const fetchRows = useCallback(async () => {
@@ -640,20 +559,35 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
         setLoading(true);
         setLoadErr("");
+
         try {
             let all = [];
             let from = 0;
 
             while (true) {
-                let qb = supabase
-                    .from("plaka_atamalar")
-                    .select(
-                        "id,batch_id,line_no,seferno,sevktarihi,cekici,dorse,tc,surucu,telefon,faturavkn,arac_durumu,peron_no,peron_giren_user_id,peron_giren_user_name,peron_giren_user_email,peron_giris_tarihi,varis1,varis2,varis3,datalogerno,irsaliyeno,navlun,teslimattarihsaat,updated_at"
-                )
+                const qb = supabase
+                    .from(DATA_TABLE)
+                    .select(`
+                        id,
+                        sefer_no,
+                        sevk_tarihi,
+                        musteri_adi,
+                        yukleme_yeri,
+                        cekici,
+                        dorse,
+                        tc,
+                        surucu,
+                        telefon,
+                        vkn,
+                        varis1,
+                        varis2,
+                        irsaliyeno,
+                        navlun,
+                        arac_durumu,
+                        created_at
+                    `)
                     .order("id", { ascending: true })
                     .range(from, from + ROW_PAGE - 1);
-
-                if (batchId) qb = qb.eq("batch_id", batchId);
 
                 const { data, error } = await qb;
                 if (error) throw error;
@@ -673,7 +607,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         } finally {
             setLoading(false);
         }
-    }, [batchId, mapDbToRow, perm.ekranGorunur]);
+    }, [mapDbToRow, perm.ekranGorunur]);
 
     const fetchPlakalar = useCallback(async () => {
         setPlakaLoading(true);
@@ -711,7 +645,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 from += pageSize;
             }
 
-            console.log("plakalar toplam çekilen:", all.length);
             setPlakalar(all);
         } catch (e) {
             console.error("fetchPlakalar exception:", e);
@@ -722,34 +655,31 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         }
     }, []);
 
-    const handleCreateDriver = useCallback(
-        async (payload) => {
-            const insertPayload = {
-                cekici: "",
-                dorse: "",
-                ad_soyad: payload.ad_soyad?.trim() || "",
-                telefon: payload.telefon?.trim() || "",
-                tc_no: payload.tc_no?.trim() || "",
-                vkn: "",
-                tip: "",
-            };
+    const handleCreateDriver = useCallback(async (payload) => {
+        const insertPayload = {
+            cekici: "",
+            dorse: "",
+            ad_soyad: payload.ad_soyad?.trim() || "",
+            telefon: payload.telefon?.trim() || "",
+            tc_no: payload.tc_no?.trim() || "",
+            vkn: "",
+            tip: "",
+        };
 
-            const { data, error } = await supabase
-                .from("plakalar")
-                .insert([insertPayload])
-                .select("id, cekici, dorse, tc_no, ad_soyad, telefon, vkn, tip")
-                .single();
+        const { data, error } = await supabase
+            .from("plakalar")
+            .insert([insertPayload])
+            .select("id, cekici, dorse, tc_no, ad_soyad, telefon, vkn, tip")
+            .single();
 
-            if (error) {
-                throw new Error(error.message || "Şoför kaydı oluşturulamadı.");
-            }
+        if (error) {
+            throw new Error(error.message || "Şoför kaydı oluşturulamadı.");
+        }
 
-            setPlakalar((prev) => [data, ...prev]);
+        setPlakalar((prev) => [data, ...prev]);
+        return data;
+    }, []);
 
-            return data;
-        },
-        []
-    );
     const ensurePlakalarLoaded = useCallback(async () => {
         if (plakaLoading) return;
         if (Array.isArray(plakalar) && plakalar.length > 0) return;
@@ -760,354 +690,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         if (permLoading) return;
         if (!perm.ekranGorunur) return;
         fetchRows();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [permLoading, perm.ekranGorunur]);
-
-    const fetchNavlunFromSartlari = useCallback(
-        async ({ varis1, varis2, varis3 }) => {
-            const clean = (x) => String(x ?? "").trim();
-
-            const v1 = clean(varis1);
-            const v2 = clean(varis2);
-            const v3 = clean(varis3);
-
-            if (!v1) {
-                return {
-                    navlun: null,
-                    matchedCok: false,
-                };
-            }
-
-            const getTekNavlun = async (nokta) => {
-                const raw = clean(nokta);
-                if (!raw) return null;
-
-                const exactVal = raw;
-                const normalizedVal = normalizeVarisBase(raw);
-
-                const exactRes = await supabase
-                    .from("navlun_sartlari")
-                    .select("navlun, id")
-                    .eq("aktif", true)
-                    .ilike("nokta_sayisi", "TEK")
-                    .ilike("nokta1", exactVal)
-                    .order("id", { ascending: false })
-                    .limit(1);
-
-                if (exactRes.error) {
-                    console.error("getTekNavlun exact error:", exactRes.error);
-                    return null;
-                }
-
-                const exactNav = exactRes.data?.[0]?.navlun ?? null;
-                if (exactNav != null && exactNav !== "") return exactNav;
-
-                if (!normalizedVal) return null;
-
-                const normRes = await supabase
-                    .from("navlun_sartlari")
-                    .select("navlun, id")
-                    .eq("aktif", true)
-                    .ilike("nokta_sayisi", "TEK")
-                    .ilike("nokta1", normalizedVal)
-                    .order("id", { ascending: false })
-                    .limit(1);
-
-                if (normRes.error) {
-                    console.error("getTekNavlun normalized error:", normRes.error);
-                    return null;
-                }
-
-                return normRes.data?.[0]?.navlun ?? null;
-            };
-
-            const maxNavlun = (...vals) => {
-                const nums = vals.map((x) => toNumber(x)).filter((x) => x != null);
-                if (nums.length === 0) return null;
-                return Math.max(...nums);
-            };
-
-            if (v1 && v2 && v3) {
-                const { data, error } = await supabase
-                    .from("navlun_sartlari")
-                    .select("navlun, id")
-                    .eq("aktif", true)
-                    .ilike("nokta_sayisi", "COK")
-                    .ilike("nokta1", v1)
-                    .ilike("nokta2", v2)
-                    .ilike("nokta3", v3)
-                    .order("id", { ascending: false })
-                    .limit(1);
-
-                if (error) {
-                    console.error("fetchNavlunFromSartlari COK(123) error:", error);
-                    return {
-                        navlun: null,
-                        matchedCok: false,
-                    };
-                }
-
-                const exactNav = data?.[0]?.navlun ?? null;
-                if (exactNav != null && exactNav !== "") {
-                    return {
-                        navlun: exactNav,
-                        matchedCok: true,
-                    };
-                }
-
-                const [n1, n2, n3] = await Promise.all([
-                    getTekNavlun(v1),
-                    getTekNavlun(v2),
-                    getTekNavlun(v3),
-                ]);
-
-                return {
-                    navlun: maxNavlun(n1, n2, n3),
-                    matchedCok: false,
-                };
-            }
-
-            if (v1 && v2) {
-                const resNull = await supabase
-                    .from("navlun_sartlari")
-                    .select("navlun, id")
-                    .eq("aktif", true)
-                    .ilike("nokta_sayisi", "COK")
-                    .ilike("nokta1", v1)
-                    .ilike("nokta2", v2)
-                    .is("nokta3", null)
-                    .order("id", { ascending: false })
-                    .limit(1);
-
-                const resEmpty = await supabase
-                    .from("navlun_sartlari")
-                    .select("navlun, id")
-                    .eq("aktif", true)
-                    .ilike("nokta_sayisi", "COK")
-                    .ilike("nokta1", v1)
-                    .ilike("nokta2", v2)
-                    .eq("nokta3", "")
-                    .order("id", { ascending: false })
-                    .limit(1);
-
-                const candNull = resNull.data?.[0] ?? null;
-                const candEmpty = resEmpty.data?.[0] ?? null;
-
-                const bestExact =
-                    !candNull
-                        ? candEmpty
-                        : !candEmpty
-                            ? candNull
-                            : Number(candNull.id ?? 0) >= Number(candEmpty.id ?? 0)
-                                ? candNull
-                                : candEmpty;
-
-                if (bestExact?.navlun != null && bestExact?.navlun !== "") {
-                    return {
-                        navlun: bestExact.navlun,
-                        matchedCok: true,
-                    };
-                }
-
-                const [n1, n2] = await Promise.all([getTekNavlun(v1), getTekNavlun(v2)]);
-
-                return {
-                    navlun: maxNavlun(n1, n2),
-                    matchedCok: false,
-                };
-            }
-
-            return {
-                navlun: await getTekNavlun(v1),
-                matchedCok: false,
-            };
-        },
-        [supabase, normalizeVarisBase]
-    );
-    const fetchUgramaBedeli = useCallback(
-        async (vkn) => {
-            const cleanVkn = normDigits(vkn);
-            if (!cleanVkn) return null;
-
-            const { data, error } = await supabase
-                .from("ugrama_sartlari")
-                .select("ugrama_bedeli, tedarikci, id")
-                .order("id", { ascending: false });
-
-            if (error) {
-                console.error("fetchUgramaBedeli error:", error);
-                return null;
-            }
-
-            const match = (data || []).find((x) => normDigits(x?.tedarikci) === cleanVkn);
-
-            return match?.ugrama_bedeli ?? null;
-        },
-        [supabase, normDigits]
-    );
-
-    const recomputeNavlunForRow = useCallback(
-        async (rowId) => {
-            const row = rowsRef.current.find((r) => r.id === rowId);
-            if (!row) return;
-
-            // ✅ Özel VKN listesi varsa tüm şartları bypass et
-            if (isDirectFiloVkn(row.vkn)) {
-                patchRow(rowId, {
-                    __navlunBase: "FİLO",
-                    navlun: "FİLO",
-                    __datalogerDiscountApplied: false,
-                });
-                return;
-            }
-
-            const hasVaris1 = String(row.varis1 ?? "").trim() !== "";
-            const hasVaris2 = String(row.varis2 ?? "").trim() !== "";
-            const hasVaris3 = String(row.varis3 ?? "").trim() !== "";
-            const hasAnyVaris = hasVaris1 || hasVaris2 || hasVaris3;
-
-            if (!hasAnyVaris) return;
-
-            let baseNavlun = row.__navlunBase ?? row.navlun ?? "";
-
-            const rotaResult = await fetchNavlunFromSartlari({
-                varis1: row.varis1,
-                varis2: row.varis2,
-                varis3: row.varis3,
-            });
-
-            const rotaNav = rotaResult?.navlun ?? null;
-            const matchedCokNavlun = rotaResult?.matchedCok === true;
-
-            if (rotaNav != null && rotaNav !== "") {
-                baseNavlun = rotaNav;
-            } else {
-                const currentNav = toNumber(row.navlun);
-                let fallbackNavlun = currentNav != null ? currentNav : 0;
-
-                // navlun_sartlari'nda bulunamadıysa ekleme yap
-                if (hasVaris1 && hasVaris2 && hasVaris3) {
-                    fallbackNavlun += 900 * 2;
-                } else if (hasVaris1 && hasVaris2) {
-                    fallbackNavlun += 900;
-                }
-
-                baseNavlun = fallbackNavlun;
-            }
-            let ugramaBedeliRaw = null;
-            let ugramaBedeli = null;
-            let navlunAfterUgrama = toNumber(baseNavlun);
-
-            const cleanRowVkn = normDigits(row.vkn);
-
-            // ✅ Aynı yerin -1 / -2 / -3 varyasyonları tek nokta sayılır
-            const b1 = normalizeVarisBase(row.varis1);
-            const b2 = normalizeVarisBase(row.varis2);
-            const b3 = normalizeVarisBase(row.varis3);
-
-            const s1 = normalizeStopName(row.varis1);
-            const s2 = normalizeStopName(row.varis2);
-
-            const uniqueStops = new Set([b1, b2, b3].filter(Boolean));
-            const uniqueStopCount = uniqueStops.size;
-
-            // ✅ İstisna:
-            // varis1 = DENİZLİ ve varis2 = AYDIN ise uğrama yok
-            // varis1 = DENİZLİ ve varis2 = MUĞLA ise uğrama yok
-            const isNoUgramaException =
-                (
-                    s1 === "DENİZLİ" &&
-                    (s2 === "AYDIN" || s2 === "MUĞLA")
-                ) ||
-                matchedCokNavlun;
-
-            if (cleanRowVkn && navlunAfterUgrama != null) {
-                ugramaBedeliRaw = await fetchUgramaBedeli(cleanRowVkn);
-                ugramaBedeli = toNumber(ugramaBedeliRaw);
-
-                if (ugramaBedeli != null && !isNoUgramaException) {
-                    if (uniqueStopCount >= 3) {
-                        navlunAfterUgrama = navlunAfterUgrama + ugramaBedeli * 2;
-                    } else if (uniqueStopCount === 2) {
-                        navlunAfterUgrama = navlunAfterUgrama + ugramaBedeli;
-                    }
-                    // uniqueStopCount === 1 ise uğrama yok
-                }
-            }
-            const finalBaseNavlun = navlunAfterUgrama != null ? navlunAfterUgrama : baseNavlun;
-
-            const hasDataloger = String(row.datalogerno ?? "").trim() !== "";
-            const baseChanged = String(row.__navlunBase ?? "") !== String(finalBaseNavlun ?? "");
-
-            let nextNavlun = finalBaseNavlun;
-            let nextApplied = false;
-
-            if (hasDataloger) {
-                const n = toNumber(finalBaseNavlun);
-                if (n != null) {
-                    if (!row.__datalogerDiscountApplied || baseChanged) {
-                        nextNavlun = Math.max(0, n - 500);
-                        nextApplied = true;
-                    } else {
-                        nextNavlun = row.navlun;
-                        nextApplied = true;
-                    }
-                } else {
-                    nextNavlun = finalBaseNavlun;
-                    nextApplied = false;
-                }
-            } else {
-                nextNavlun = finalBaseNavlun;
-                nextApplied = false;
-            }
-
-            patchRow(rowId, {
-                __navlunBase: finalBaseNavlun,
-                navlun: nextNavlun,
-                __datalogerDiscountApplied: nextApplied,
-            });
-        },
-        [
-            fetchNavlunFromSartlari,
-            fetchUgramaBedeli,
-            patchRow,
-            normDigits,
-            normalizeVarisBase,
-            normalizeStopName,
-            isDirectFiloVkn,
-        ]
-    );
-    const recomputeTimersRef = useRef(new Map());
-
-    const scheduleRecompute = useCallback(
-        (rowId, delay = RECOMPUTE_DELAY_MS) => {
-            const m = recomputeTimersRef.current;
-            if (m.has(rowId)) clearTimeout(m.get(rowId));
-            const t = setTimeout(() => {
-                m.delete(rowId);
-                recomputeNavlunForRow(rowId);
-            }, delay);
-            m.set(rowId, t);
-        },
-        [recomputeNavlunForRow]
-    );
-
-    const initialRecomputeDoneRef = useRef(false);
-
-    useEffect(() => {
-        if (!rows.length) return;
-        if (initialRecomputeDoneRef.current) return;
-
-        initialRecomputeDoneRef.current = true;
-
-        const targets = rows
-            .filter((r) => String(r?.navlun ?? "").trim() === "" && r?.id != null)
-            .slice(0, 50);
-
-        targets.forEach((r, i) => {
-            scheduleRecompute(r.id, i * 150);
-        });
-    }, [rows, scheduleRecompute]);
+    }, [permLoading, perm.ekranGorunur, fetchRows]);
 
     const plakaMaps = useMemo(() => {
         const m = {
@@ -1142,50 +725,29 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         return m;
     }, [plakalar, normPlate, normDigits]);
 
-    const buildDbPayloadFromRow = useCallback(
-        (r, idx) => {
-            const obj = {
-                batch_id: r.__batch_id ?? batchId ?? null,
-                line_no: r.__line_no ?? idx + 1,
+    const buildDbPayloadFromRow = useCallback((r) => {
+        const obj = {
+            sefer_no: r.sefer ?? "",
+            sevk_tarihi: r.sevk ?? "",
+            musteri_adi: r.musteri_adi ?? "",
+            yukleme_yeri: r.yukleme_yeri ?? "",
+            cekici: r.cekici ?? "",
+            dorse: r.dorse ?? "",
+            tc: r.tc ?? "",
+            surucu: r.surucu ?? "",
+            telefon: r.tel ?? "",
+            vkn: r.vkn ?? "",
+            varis1: r.varis1 ?? "",
+            varis2: r.varis2 ?? "",
+            irsaliyeno: r.irsaliye ?? "",
+            navlun: r.navlun ?? "",
+            arac_durumu: r.arac_durumu ?? "",
+        };
 
-                seferno: r.sefer ?? "",
-                sevktarihi: r.sevk ?? "",
+        if (r.__db_id != null) obj.id = r.__db_id;
+        return obj;
+    }, []);
 
-                cekici: r.cekici ?? "",
-                dorse: r.dorse ?? "",
-
-                tc: r.tc ?? "",
-                surucu: r.surucu ?? "",
-                telefon: r.tel ?? "",
-                faturavkn: r.vkn ?? "",
-
-                arac_durumu: r.arac_durumu ?? "",
-                peron_no: r.peron_no ?? "",
-
-                peron_giren_user_id: r.peron_giren_user_id ?? null,
-                peron_giren_user_name: r.peron_giren_user_name ?? "",
-                peron_giren_user_email: r.peron_giren_user_email ?? "",
-                peron_giris_tarihi:
-                    String(r.peron_giris_tarihi ?? "").trim() !== ""
-                        ? r.peron_giris_tarihi
-                        : null,
-
-                varis1: r.varis1 ?? "",
-                varis2: r.varis2 ?? "",
-                varis3: r.varis3 ?? "",
-
-                datalogerno: r.datalogerno ?? "",
-
-                irsaliyeno: r.irsaliye ?? "",
-                navlun: r.navlun ?? "",
-                teslimattarihsaat: r.teslimat ?? "",
-            };
-            if (r.__db_id != null) obj.id = r.__db_id;
-
-            return obj;
-        },
-        [batchId]
-    );
     const saveDirtyRows = useCallback(async () => {
         if (!perm.ekranYazma || !can(BTN.SAVE)) return;
         if (autoSaving || saving) return;
@@ -1201,7 +763,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
             const payload = currentRows
                 .filter((r) => dirtySet.has(r.id))
-                .map((r) => buildDbPayloadFromRow(r, rowIndexRef.current.get(r.id) ?? 0));
+                .map((r) => buildDbPayloadFromRow(r));
 
             if (payload.length === 0) return;
 
@@ -1209,31 +771,20 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             const parts = chunkArray(payload, UPSERT_CHUNK);
 
             for (const part of parts) {
-                console.log("AUTOSAVE PART =>", part);
-
                 const { error } = await supabase
-                    .from("plaka_atamalar")
+                    .from(DATA_TABLE)
                     .upsert(part, { onConflict: "id" });
 
-                if (error) {
-                    console.error("AUTOSAVE SUPABASE ERROR =>", error);
-                    console.error("AUTOSAVE FAILED PART =>", part);
-                    throw error;
-                }
+                if (error) throw error;
             }
+
             dirtyIds.forEach((id) => dirtyRowIdsRef.current.delete(id));
             setLastAutoSaveAt(new Date());
         } catch (e) {
-            console.error("autosave error full:", JSON.stringify(e, null, 2));
-            console.error("autosave error raw:", e);
-
+            console.error("autosave error:", e);
             setSnack({
                 open: true,
-                msg:
-                    e?.message ||
-                    e?.details ||
-                    e?.hint ||
-                    "Otomatik kaydetme hatası",
+                msg: e?.message || "Otomatik kaydetme hatası",
                 sev: "error",
             });
         } finally {
@@ -1245,9 +796,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         (rowId) => {
             dirtyRowIdsRef.current.add(rowId);
 
-            if (autoSaveTimerRef.current) {
-                clearTimeout(autoSaveTimerRef.current);
-            }
+            if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
             autoSaveTimerRef.current = setTimeout(() => {
                 autoSaveTimerRef.current = null;
@@ -1259,45 +808,25 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
     const applyFromPlakaRecord = useCallback(
         (rowId, plakaRec) => {
-            const tip = String(plakaRec?.tip ?? "").trim().toUpperCase();
+            patchRow(rowId, (r) => ({
+                cekici: plakaRec?.cekici ?? r.cekici ?? "",
+                dorse: plakaRec?.dorse ?? r.dorse ?? "",
+                tc: plakaRec?.tc_no ?? r.tc ?? "",
+                surucu: plakaRec?.ad_soyad ?? r.surucu ?? "",
+                tel: plakaRec?.telefon ?? r.tel ?? "",
+                vkn: plakaRec?.vkn ?? r.vkn ?? "",
+            }));
 
-            patchRow(rowId, (r) => {
-                const nextVkn = plakaRec?.vkn ?? r.vkn ?? "";
-                const isFiloTip = tip === "FİLO" || tip === "FILO";
-                const isFiloByVkn = isDirectFiloVkn(nextVkn);
-                const nextNav = isFiloTip || isFiloByVkn ? "FİLO" : r.navlun ?? "";
-
-                return {
-                    cekici: plakaRec?.cekici ?? r.cekici ?? "",
-                    dorse: plakaRec?.dorse ?? r.dorse ?? "",
-                    tc: plakaRec?.tc_no ?? r.tc ?? "",
-                    surucu: plakaRec?.ad_soyad ?? r.surucu ?? "",
-                    tel: plakaRec?.telefon ?? r.tel ?? "",
-                    vkn: nextVkn,
-
-                    navlun: nextNav,
-                    __navlunBase: nextNav,
-                    __datalogerDiscountApplied: false,
-                };
-            });
-
-            setTimeout(() => recomputeNavlunForRow(rowId), 0);
             scheduleAutoSave(rowId);
         },
-        [patchRow, recomputeNavlunForRow, scheduleAutoSave, isDirectFiloVkn]
+        [patchRow, scheduleAutoSave]
     );
 
     const handleChange = useCallback(
         (id, field, value) => {
             if (!perm.ekranYazma || !can(BTN.ROW_EDIT)) return;
 
-            const forcedListboxFields = new Set([
-                "cekici",
-                "surucu",
-                "vkn",
-                "arac_durumu",
-                "peron_no",
-            ]);
+            const forcedListboxFields = new Set(["cekici", "surucu", "vkn", "arac_durumu"]);
 
             if (
                 !forcedListboxFields.has(String(field).trim()) &&
@@ -1306,50 +835,9 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             ) {
                 if (colPerms[field]?.duzenleyebilir !== true) return;
             }
-            if (field === "navlun") {
-                patchRow(id, { navlun: value, __navlunBase: value, __datalogerDiscountApplied: false });
-            } else if (field === "peron_no") {
-                const raw = localStorage.getItem("bapsis_user");
-                const lsUser = raw ? JSON.parse(raw) : null;
 
-                const nowIso = new Date().toISOString();
+            patchRow(id, { [field]: value });
 
-                console.log("PERON CHANGE =>", {
-                    rowId: id,
-                    value,
-                    lsUser,
-                    nowIso,
-                });
-
-                patchRow(id, (prev) => {
-                    const nextRow = {
-                        peron_no: value,
-                        peron_giren_user_id: lsUser?.id ?? null,
-                        peron_giren_user_name:
-                            lsUser?.displayName ??
-                            lsUser?.ad_soyad ??
-                            lsUser?.name ??
-                            lsUser?.full_name ??
-                            lsUser?.username ??
-                            lsUser?.user_name ??
-                            "",
-                        peron_giren_user_email:
-                            lsUser?.email ??
-                            lsUser?.mail ??
-                            "",
-                        peron_giris_tarihi: nowIso,
-                    };
-
-                    console.log("PATCH ROW =>", {
-                        onceki: prev,
-                        sonraki: { ...prev, ...nextRow },
-                    });
-
-                    return nextRow;
-                });
-            } else {
-                patchRow(id, { [field]: value });
-            }
             if (plakalar.length > 0) {
                 let rec = null;
 
@@ -1365,14 +853,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 }
             }
 
-            if (["varis1", "varis2", "varis3", "datalogerno", "vkn"].includes(field)) {
-                scheduleRecompute(id, RECOMPUTE_DELAY_MS);
-            }
-
-            if (field === "navlun") {
-                scheduleNavlunDiscount(id, NAVLUN_TYPING_DELAY_MS);
-            }
-
             scheduleAutoSave(id);
         },
         [
@@ -1385,20 +865,13 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             normPlate,
             normDigits,
             applyFromPlakaRecord,
-            scheduleRecompute,
-            scheduleNavlunDiscount,
             scheduleAutoSave,
         ]
     );
 
     useEffect(() => {
         return () => {
-            if (autoSaveTimerRef.current) {
-                clearTimeout(autoSaveTimerRef.current);
-            }
-
-            recomputeTimersRef.current.forEach((t) => clearTimeout(t));
-            recomputeTimersRef.current.clear();
+            if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         };
     }, []);
 
@@ -1416,6 +889,8 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
     const SEARCH_KEYS = [
         "sefer",
         "sevk",
+        "musteri_adi",
+        "yukleme_yeri",
         "cekici",
         "dorse",
         "surucu",
@@ -1423,14 +898,10 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         "tel",
         "vkn",
         "arac_durumu",
-        "peron_no",
         "varis1",
         "varis2",
-        "varis3",
         "irsaliye",
-        "datalogerno",
         "navlun",
-        "teslimat",
         "guncellendi",
     ];
 
@@ -1438,6 +909,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         const query = normalizeSearchText(qDeb);
 
         return rows.filter((r) => {
+            if (filterMissingPlate && String(r.tc || "").trim() !== "") return false;
             if (!query) return true;
 
             return SEARCH_KEYS.some((key) => {
@@ -1445,10 +917,8 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 return val.includes(query);
             });
         });
-    }, [rows, qDeb, normalizeSearchText]);
-    // =========================
-    // ✅ SEÇİM (CHECKBOX)
-    // =========================
+    }, [rows, qDeb, filterMissingPlate, normalizeSearchText]);
+
     const [selectedIds, setSelectedIds] = useState(() => new Set());
 
     useEffect(() => {
@@ -1493,7 +963,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         return rows.filter((r) => set.has(r.id));
     }, [rows, selectedIds]);
 
-    // ====== LISTBOX ======
     const fieldToPlakaKey = (field) => {
         switch (field) {
             case "cekici":
@@ -1517,7 +986,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         (e, rowId, field) => {
             if (!can(BTN.ROW_OPEN_LISTBOX)) return;
 
-            const forcedListboxFields = ["cekici", "surucu", "vkn", "arac_durumu", "peron_no"];
+            const forcedListboxFields = ["cekici", "surucu", "vkn", "arac_durumu"];
             const isForcedListboxField = forcedListboxFields.includes(String(field).trim());
 
             if (!isForcedListboxField && colPerms && Object.prototype.hasOwnProperty.call(colPerms, field)) {
@@ -1537,10 +1006,9 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             !plakaLoading &&
             (!Array.isArray(plakalar) || plakalar.length === 0);
 
-        if (needsRemoteList) {
-            fetchPlakalar();
-        }
+        if (needsRemoteList) fetchPlakalar();
     }, [lb.open, lb.field, lb.query, plakaLoading, plakalar, fetchPlakalar]);
+
     const closeListbox = () => setLb({ open: false, anchorEl: null, rowId: null, field: null, query: "" });
 
     const closeTimeDialog = useCallback(() => {
@@ -1558,6 +1026,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             value: isTimeLike ? current : "",
         });
     }, []);
+
     const plakaIndex = useMemo(() => {
         const idx = {
             cekici: [],
@@ -1597,21 +1066,18 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
         return idx;
     }, [plakalar]);
-    const debouncedLbQuery = useDebouncedValue(lb.query, 120);
 
-    // ✅ İlk açılışta ekranda gösterilecek kayıt
-    const LISTBOX_INITIAL_LIMIT = 0;
+    const debouncedLbQuery = useDebouncedValue(lb.query, 120);
     const LISTBOX_SEARCH_LIMIT = 100;
+
     const listboxSearchResult = useMemo(() => {
         if (!lb.open || !lb.field) return { options: [], totalMatches: 0 };
 
         let base = [];
-        const isDirectListField = lb.field === "arac_durumu" || lb.field === "peron_no";
+        const isDirectListField = lb.field === "arac_durumu";
 
         if (lb.field === "arac_durumu") {
             base = ARAC_DURUMU_OPTIONS;
-        } else if (lb.field === "peron_no") {
-            base = PERON_OPTIONS;
         } else {
             const key = fieldToPlakaKey(lb.field);
             if (!key) return { options: [], totalMatches: 0 };
@@ -1620,7 +1086,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
 
         const rawQuery = String(debouncedLbQuery || "").trim();
 
-        // ✅ araç durumu ve peron no için direkt liste göster
         if (isDirectListField) {
             return {
                 options: base.slice(0, LISTBOX_SEARCH_LIMIT),
@@ -1628,7 +1093,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             };
         }
 
-        // diğer alanlarda arama devam etsin
         if (rawQuery.length < 2) {
             return {
                 options: [],
@@ -1653,13 +1117,8 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             options: matches,
             totalMatches: matches.length,
         };
-    }, [
-        lb.open,
-        lb.field,
-        debouncedLbQuery,
-        plakaIndex,
-        normalizeSearchText,
-    ]);
+    }, [lb.open, lb.field, debouncedLbQuery, plakaIndex, normalizeSearchText]);
+
     const listboxOptions = listboxSearchResult.options;
     const listboxTotalMatches = listboxSearchResult.totalMatches;
 
@@ -1669,10 +1128,9 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             const field = lb.field;
             if (!rowId || !field) return;
 
-            // ✅ araç durumu özel davranış
             if (field === "arac_durumu") {
-                if (pickedValue === "TESİSTE") {
-                    handleChange(rowId, "arac_durumu", "TESİSTE");
+                if (pickedValue === "DEPODA") {
+                    handleChange(rowId, "arac_durumu", "DEPODA");
                     closeListbox();
                     return;
                 }
@@ -1682,12 +1140,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     openTimeDialog(rowId);
                     return;
                 }
-            }
-            // ✅ peron no özel davranış
-            if (field === "peron_no") {
-                handleChange(rowId, "peron_no", pickedValue);
-                closeListbox();
-                return;
             }
 
             let rec = null;
@@ -1718,14 +1170,14 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             openTimeDialog,
         ]
     );
-    // ====== SWAP ======
+
     const openSwap = useCallback(
         async (rowId) => {
             if (!can(BTN.ROW_SWAP_DRIVER)) return;
 
             const row = rows.find((r) => r.id === rowId);
-
             const hasVehicle = String(row?.cekici || "").trim() !== "" || String(row?.dorse || "").trim() !== "";
+
             if (!hasVehicle) {
                 setSnack({ open: true, msg: "Önce bu satıra Çekici/Dorse seçmelisin.", sev: "warning" });
                 openDetails(rowId);
@@ -1749,11 +1201,109 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         [can, rows, ensurePlakalarLoaded, plakaLoading, normPlate, plakaMaps, openDetails]
     );
 
-    const vknRow = useMemo(() => rows.find((r) => r.id === vknDlg.rowId) || null, [rows, vknDlg.rowId]);
+    const openIadeDialog = useCallback(
+        (rowId) => {
+            if (!perm.ekranYazma || !can(BTN.ROW_CREATE_IADE)) return;
+            setIadeDlg({ open: true, rowId });
+        },
+        [perm.ekranYazma, can]
+    );
 
-    // =========================
-    // ✅ YENİLE / KAYDET / EXCEL
-    // =========================
+    const closeIadeDialog = useCallback(() => {
+        setIadeDlg({ open: false, rowId: null });
+    }, []);
+
+    const onConfirmCreateIadeRow = useCallback(async () => {
+        if (!perm.ekranYazma || !can(BTN.ROW_CREATE_IADE)) return;
+
+        const sourceRowId = iadeDlg.rowId;
+        const sourceRow = rowsRef.current.find((r) => r.id === sourceRowId);
+
+        if (!sourceRow) {
+            setSnack({ open: true, msg: "Kaynak satır bulunamadı.", sev: "warning" });
+            return;
+        }
+
+        try {
+            setSaving(true);
+
+            const insertPayload = {
+                sefer_no: sourceRow.sefer ?? "",
+                sevk_tarihi: sourceRow.sevk ?? "",
+                musteri_adi: sourceRow.musteri_adi ?? "",
+                yukleme_yeri: sourceRow.varis1 ?? "",
+                cekici: sourceRow.cekici ?? "",
+                dorse: sourceRow.dorse ?? "",
+                tc: sourceRow.tc ?? "",
+                surucu: sourceRow.surucu ?? "",
+                telefon: sourceRow.tel ?? "",
+                vkn: sourceRow.vkn ?? "",
+                varis1: sourceRow.yukleme_yeri ?? "",
+                varis2: sourceRow.varis2 ?? "",
+                irsaliyeno: sourceRow.irsaliye ?? "",
+                navlun: sourceRow.navlun ?? "",
+                arac_durumu: sourceRow.arac_durumu ?? "",
+            };
+
+            const { data, error } = await supabase
+                .from(DATA_TABLE)
+                .insert([insertPayload])
+                .select(`
+                    id,
+                    sefer_no,
+                    sevk_tarihi,
+                    musteri_adi,
+                    yukleme_yeri,
+                    cekici,
+                    dorse,
+                    tc,
+                    surucu,
+                    telefon,
+                    vkn,
+                    varis1,
+                    varis2,
+                    irsaliyeno,
+                    navlun,
+                    arac_durumu,
+                    created_at
+                `)
+                .single();
+
+            if (error) throw error;
+
+            const newRow = mapDbToRow(data);
+
+            setRows((prev) => {
+                const idx = prev.findIndex((r) => r.id === sourceRowId);
+                if (idx === -1) return [...prev, newRow];
+
+                const next = prev.slice();
+                next.splice(idx + 1, 0, newRow);
+                return next;
+            });
+
+            closeIadeDialog();
+
+            setSnack({
+                open: true,
+                msg: "İade satırı oluşturuldu ✅",
+                sev: "success",
+            });
+        } catch (e) {
+            console.error("onConfirmCreateIadeRow error:", e);
+            setSnack({
+                open: true,
+                msg: e?.message || "İade satırı oluşturulamadı",
+                sev: "error",
+            });
+        } finally {
+            setSaving(false);
+        }
+    }, [perm.ekranYazma, can, iadeDlg.rowId, mapDbToRow, closeIadeDialog]);
+
+    const vknRow = useMemo(() => rows.find((r) => r.id === vknDlg.rowId) || null, [rows, vknDlg.rowId]);
+    const iadeRow = useMemo(() => rows.find((r) => r.id === iadeDlg.rowId) || null, [rows, iadeDlg.rowId]);
+
     const onSave = useCallback(async () => {
         if (!can(BTN.SAVE) || !perm.ekranYazma) return;
 
@@ -1765,15 +1315,12 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         try {
             setSaving(true);
 
-            const payload = rows.map((r) =>
-                buildDbPayloadFromRow(r, rowIndexRef.current.get(r.id) ?? 0)
-            );
-
+            const payload = rows.map((r) => buildDbPayloadFromRow(r));
             const UPSERT_CHUNK = 500;
             const parts = chunkArray(payload, UPSERT_CHUNK);
 
             for (const part of parts) {
-                const { error } = await supabase.from("plaka_atamalar").upsert(part, { onConflict: "id" });
+                const { error } = await supabase.from(DATA_TABLE).upsert(part, { onConflict: "id" });
                 if (error) {
                     console.error("Save error:", error);
                     setSnack({ open: true, msg: error.message || "Kaydetme hatası", sev: "error" });
@@ -1804,13 +1351,15 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             workbook.created = new Date();
             workbook.modified = new Date();
 
-            const worksheet = workbook.addWorksheet("Plaka Atama", {
+            const worksheet = workbook.addWorksheet("Dönüş Plaka Atama", {
                 views: [{ state: "frozen", ySplit: 1 }],
             });
 
             const headers = [
                 { header: "Sefer", key: "sefer", width: 14 },
                 { header: "Sevk Tarihi", key: "sevk", width: 16 },
+                { header: "Müşteri Adı", key: "musteri_adi", width: 24 },
+                { header: "Yükleme Yeri", key: "yukleme_yeri", width: 24 },
                 { header: "Çekici", key: "cekici", width: 16 },
                 { header: "Dorse", key: "dorse", width: 16 },
                 { header: "TC", key: "tc", width: 16 },
@@ -1818,50 +1367,32 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 { header: "Telefon", key: "tel", width: 18 },
                 { header: "VKN", key: "vkn", width: 18 },
                 { header: "Araç Durumu", key: "arac_durumu", width: 18 },
-                { header: "Peron No", key: "peron_no", width: 14 },
                 { header: "Varış 1", key: "varis1", width: 22 },
                 { header: "Varış 2", key: "varis2", width: 22 },
-                { header: "Varış 3", key: "varis3", width: 22 },
-                { header: "Dataloger No", key: "datalogerno", width: 18 },
                 { header: "İrsaliye No", key: "irsaliye", width: 18 },
                 { header: "Navlun", key: "navlun", width: 14 },
-                { header: "Teslimat", key: "teslimat", width: 22 },
                 { header: "Güncellendi", key: "guncellendi", width: 22 },
             ];
             worksheet.columns = headers;
 
-            // Başlık satırı
             const headerRow = worksheet.getRow(1);
             headerRow.height = 24;
-
             headerRow.eachCell((cell) => {
-                cell.font = {
-                    bold: true,
-                    color: { argb: "FFFFFFFF" },
-                    size: 11,
-                };
-                cell.alignment = {
-                    vertical: "middle",
-                    horizontal: "center",
-                };
+                cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+                cell.alignment = { vertical: "middle", horizontal: "center" };
                 cell.fill = {
                     type: "pattern",
                     pattern: "solid",
-                    fgColor: { argb: "FF0F172A" }, // koyu lacivert
-                };
-                cell.border = {
-                    top: { style: "thin", color: { argb: "FF334155" } },
-                    left: { style: "thin", color: { argb: "FF334155" } },
-                    bottom: { style: "thin", color: { argb: "FF334155" } },
-                    right: { style: "thin", color: { argb: "FF334155" } },
+                    fgColor: { argb: "FF0F172A" },
                 };
             });
 
-            // Veri satırları
             filteredRows.forEach((r) => {
                 worksheet.addRow({
                     sefer: r.sefer ?? "",
                     sevk: r.sevk ?? "",
+                    musteri_adi: r.musteri_adi ?? "",
+                    yukleme_yeri: r.yukleme_yeri ?? "",
                     cekici: r.cekici ?? "",
                     dorse: r.dorse ?? "",
                     tc: r.tc ?? "",
@@ -1869,138 +1400,16 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     tel: r.tel ?? "",
                     vkn: r.vkn ?? "",
                     arac_durumu: r.arac_durumu ?? "",
-                    peron_no: r.peron_no ?? "",
-                    peron_giren_user_id: r.peron_giren_user_id ?? null,
-                    peron_giren_user_name: r.peron_giren_user_name ?? "",
-                    peron_giren_user_email: r.peron_giren_user_email ?? "",
-                    peron_giris_tarihi:
-                        String(r.peron_giris_tarihi ?? "").trim() !== ""
-                            ? r.peron_giris_tarihi
-                            : null,
                     varis1: r.varis1 ?? "",
                     varis2: r.varis2 ?? "",
-                    varis3: r.varis3 ?? "",
-                    datalogerno: r.datalogerno ?? "",
                     irsaliye: r.irsaliye ?? "",
                     navlun: r.navlun ?? "",
-                    teslimat: r.teslimat ?? "",
                     guncellendi: r.guncellendi ?? "",
                 });
             });
-            // Tüm satırlara stil
-            worksheet.eachRow((row, rowNumber) => {
-                if (rowNumber === 1) return;
-
-                row.height = 22;
-
-                row.eachCell((cell, colNumber) => {
-                    cell.alignment = {
-                        vertical: "middle",
-                        horizontal: colNumber === 16 ? "right" : "left",
-                    };
-                    cell.border = {
-                        top: { style: "thin", color: { argb: "FFE2E8F0" } },
-                        left: { style: "thin", color: { argb: "FFE2E8F0" } },
-                        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
-                        right: { style: "thin", color: { argb: "FFE2E8F0" } },
-                    };
-
-                    cell.fill = {
-                        type: "pattern",
-                        pattern: "solid",
-                        fgColor: {
-                            argb: rowNumber % 2 === 0 ? "FFF8FAFC" : "FFFFFFFF",
-                        },
-                    };
-
-                    cell.font = {
-                        size: 10,
-                        color: { argb: "FF0F172A" },
-                    };
-                });
-
-                // Navlun kolonunu sayısal görünüm yap
-                const navlunCell = row.getCell(16);
-                const navlunNum = Number(String(row.getCell(16).value ?? "").replace(",", "."));
-                if (!Number.isNaN(navlunNum) && String(row.getCell(16).value ?? "").trim() !== "") {
-                    navlunCell.value = navlunNum;
-                    navlunCell.numFmt = '#,##0.00';
-                    navlunCell.font = {
-                        bold: true,
-                        size: 10,
-                        color: { argb: "FF0F172A" },
-                    };
-                }
-
-                // Eksik TC varsa hafif kırmızı vurgula
-                const tcVal = String(row.getCell(5).value ?? "").trim();
-                if (!tcVal) {
-                    row.eachCell((cell) => {
-                        cell.fill = {
-                            type: "pattern",
-                            pattern: "solid",
-                            fgColor: { argb: "FFFEF2F2" },
-                        };
-                    });
-                }
-            });
-
-            // AutoFilter
-            worksheet.autoFilter = {
-                from: "A1",
-                to: "R1",
-            };
-            // Üst bilgi bölümü
-            worksheet.insertRow(1, []);
-            worksheet.mergeCells("A1:R1");
-            const titleCell = worksheet.getCell("A1");
-            titleCell.value = "PLAKA ATAMA RAPORU";
-            titleCell.font = {
-                bold: true,
-                size: 15,
-                color: { argb: "FF0F172A" },
-            };
-            titleCell.alignment = {
-                vertical: "middle",
-                horizontal: "left",
-            };
-            titleCell.fill = {
-                type: "pattern",
-                pattern: "solid",
-                fgColor: { argb: "FFE2E8F0" },
-            };
-            worksheet.getRow(1).height = 26;
-
-            // Header artık 2. satırda
-            const newHeaderRow = worksheet.getRow(2);
-            newHeaderRow.height = 24;
-            newHeaderRow.eachCell((cell) => {
-                cell.font = {
-                    bold: true,
-                    color: { argb: "FFFFFFFF" },
-                    size: 11,
-                };
-                cell.alignment = {
-                    vertical: "middle",
-                    horizontal: "center",
-                };
-                cell.fill = {
-                    type: "pattern",
-                    pattern: "solid",
-                    fgColor: { argb: "FF0F172A" },
-                };
-                cell.border = {
-                    top: { style: "thin", color: { argb: "FF334155" } },
-                    left: { style: "thin", color: { argb: "FF334155" } },
-                    bottom: { style: "thin", color: { argb: "FF334155" } },
-                    right: { style: "thin", color: { argb: "FF334155" } },
-                };
-            });
-
-            worksheet.views = [{ state: "frozen", ySplit: 2 }];
 
             const buffer = await workbook.xlsx.writeBuffer();
-            const fileName = `plaka-atama_${batchId || "tum"}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            const fileName = `donusler-plaka-atama_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
             saveAs(
                 new Blob([buffer], {
@@ -2009,12 +1418,13 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 fileName
             );
 
-            setSnack({ open: true, msg: "Excel modern formatta indirildi ✅", sev: "success" });
+            setSnack({ open: true, msg: "Excel indirildi ✅", sev: "success" });
         } catch (e) {
             console.error("onExport error:", e);
             setSnack({ open: true, msg: e?.message || "Excel dışa aktarma hatası", sev: "error" });
         }
-    }, [can, filteredRows, batchId]);
+    }, [can, filteredRows]);
+
     const onCompleteSelected = useCallback(async () => {
         if (!can(BTN.COMPLETE_SELECTED) || !perm.ekranYazma) return;
 
@@ -2029,7 +1439,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             return;
         }
 
-        // ✅ Sefer no boş olanları ayır
         const validRows = toMove.filter((r) => String(r.sefer ?? "").trim() !== "");
         const invalidRows = toMove.filter((r) => String(r.sefer ?? "").trim() === "");
 
@@ -2051,51 +1460,39 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             });
             return;
         }
+
         try {
             setSaving(true);
 
             const nowIso = new Date().toISOString();
 
-            const payload = validRows.map((r, idx) => ({
-                batch_id: String(r.__batch_id ?? batchId ?? ""),
-                line_no: r.__line_no ?? idx + 1,
-
-                seferno: r.sefer ?? "",
-                sevktarihi: r.sevk ?? "",
-                yukleyendepo: r.yukleyendepo ?? "",
-                kalkis: r.kalkis ?? "",
-
-                araccinsi: r.araccinsi ?? "",
+            const payload = validRows.map((r) => ({
+                sefer_no: r.sefer ?? "",
+                sevk_tarihi: r.sevk ?? "",
+                musteri_adi: r.musteri_adi ?? "",
+                yukleme_yeri: r.yukleme_yeri ?? "",
                 cekici: r.cekici ?? "",
                 dorse: r.dorse ?? "",
-
                 tc: r.tc ?? "",
                 surucu: r.surucu ?? "",
                 telefon: r.tel ?? "",
-
-                faturavkn: r.vkn ?? "",
-                arac_durumu: r.arac_durumu ?? "",
-                peron_no: r.peron_no ?? "",
-
+                vkn: r.vkn ?? "",
                 varis1: r.varis1 ?? "",
                 varis2: r.varis2 ?? "",
-                varis3: r.varis3 ?? "",
-
                 irsaliyeno: r.irsaliye ?? "",
-                datalogerno: r.datalogerno ?? "",
-
                 navlun: r.navlun ?? "",
-                teslimattarihsaat: r.teslimat ?? "",
-
-                updated_at: nowIso,
-                updated_by: null,
-                updated_by_email: null,
-                updated_by_name: null,
+                arac_durumu: r.arac_durumu ?? "",
+                created_at: nowIso,
             }));
+
             const INSERT_CHUNK = 500;
             for (let i = 0; i < payload.length; i += INSERT_CHUNK) {
                 const part = payload.slice(i, i + INSERT_CHUNK);
-                const { error } = await supabase.from("tamamlanan_seferler").insert(part);
+
+                const { error } = await supabase
+                    .from("donus_tamamlanan_seferler")
+                    .insert(part);
+
                 if (error) {
                     console.error("complete insert error:", error);
                     setSnack({
@@ -2106,13 +1503,12 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     return;
                 }
             }
-
-            const { error: delErr } = await supabase.from("plaka_atamalar").delete().in("id", dbIds);
+            const { error: delErr } = await supabase.from(DATA_TABLE).delete().in("id", dbIds);
             if (delErr) {
                 console.error("complete delete error:", delErr);
                 setSnack({
                     open: true,
-                    msg: "Tamamlananlara eklendi ama kaynak tablodan silinemedi. (Çift kayıt olabilir) ⚠️",
+                    msg: "Tamamlananlara eklendi ama kaynak tablodan silinemedi. ⚠️",
                     sev: "warning",
                 });
             }
@@ -2134,7 +1530,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         } finally {
             setSaving(false);
         }
-    }, [can, perm.ekranYazma, selectedIds, selectedRows, batchId, fetchRows, clearSelection]);
+    }, [can, perm.ekranYazma, selectedIds, selectedRows, fetchRows, clearSelection]);
 
     const onDeleteSelected = useCallback(async () => {
         if (!can(BTN.DELETE_SELECTED) || !perm.ekranYazma) return;
@@ -2155,7 +1551,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
         try {
             setSaving(true);
 
-            const { error } = await supabase.from("plaka_atamalar").delete().in("id", ids);
+            const { error } = await supabase.from(DATA_TABLE).delete().in("id", ids);
 
             if (error) {
                 console.error("delete error:", error);
@@ -2232,134 +1628,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
             </Box>
         );
     }
-    const baseButtonSx = {
-        minHeight: 44,
-        px: 2,
-        borderRadius: "16px",
-        textTransform: "none",
-        fontWeight: 800,
-        fontSize: "0.92rem",
-        letterSpacing: 0.1,
-        backdropFilter: "blur(14px)",
-        transition: "all .22s ease",
-        boxShadow: "none",
-        "& .MuiButton-startIcon": {
-            mr: 0.8,
-            "& svg": {
-                fontSize: 18,
-            },
-        },
-        "&:hover": {
-            transform: "translateY(-2px)",
-        },
-        "&:active": {
-            transform: "translateY(0)",
-        },
-        "&.Mui-disabled": {
-            opacity: 0.45,
-            color: "rgba(255,255,255,0.5)",
-            borderColor: "rgba(255,255,255,0.06)",
-        },
-    };
-
-    const ghostBtn = {
-        ...baseButtonSx,
-        color: "#e5eefc",
-        background:
-            "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.035) 100%)",
-        border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 24px rgba(0,0,0,0.14)",
-        "&:hover": {
-            transform: "translateY(-2px)",
-            background:
-                "linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.05) 100%)",
-            borderColor: "rgba(255,255,255,0.14)",
-            boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.07), 0 14px 28px rgba(0,0,0,0.18)",
-        },
-    };
-
-    const successBtn = {
-        ...baseButtonSx,
-        color: "#ecfdf5",
-        background:
-            "linear-gradient(135deg, rgba(16,185,129,0.30) 0%, rgba(5,150,105,0.22) 100%)",
-        border: "1px solid rgba(52,211,153,0.22)",
-        boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px rgba(16,185,129,0.18)",
-        "&:hover": {
-            transform: "translateY(-2px)",
-            background:
-                "linear-gradient(135deg, rgba(16,185,129,0.38) 0%, rgba(5,150,105,0.28) 100%)",
-            borderColor: "rgba(52,211,153,0.32)",
-            boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.08), 0 16px 32px rgba(16,185,129,0.24)",
-        },
-    };
-
-    const primaryBtn = {
-        ...baseButtonSx,
-        color: "#ffffff",
-        background:
-            "linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%)",
-        border: "1px solid rgba(255,255,255,0.14)",
-        boxShadow:
-            "0 14px 34px rgba(37,99,235,0.24), inset 0 1px 0 rgba(255,255,255,0.10)",
-        "&:hover": {
-            transform: "translateY(-2px)",
-            background:
-                "linear-gradient(135deg, #3b82f6 0%, #6366f1 45%, #8b5cf6 100%)",
-            boxShadow:
-                "0 18px 38px rgba(79,70,229,0.30), inset 0 1px 0 rgba(255,255,255,0.14)",
-        },
-    };
-
-    const dangerBtn = {
-        ...baseButtonSx,
-        color: "#ffe4e6",
-        background:
-            "linear-gradient(135deg, rgba(244,63,94,0.18) 0%, rgba(225,29,72,0.14) 100%)",
-        border: "1px solid rgba(244,63,94,0.22)",
-        boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 24px rgba(244,63,94,0.14)",
-        "&:hover": {
-            transform: "translateY(-2px)",
-            color: "#fff1f2",
-            background:
-                "linear-gradient(135deg, rgba(244,63,94,0.28) 0%, rgba(225,29,72,0.22) 100%)",
-            borderColor: "rgba(244,63,94,0.32)",
-            boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.07), 0 14px 28px rgba(244,63,94,0.20)",
-        },
-    };
-    const softChip = {
-        height: 30,
-        borderRadius: "999px",
-        fontWeight: 700,
-        background: "rgba(255,255,255,0.05)",
-        color: "#cbd5e1",
-        border: "1px solid rgba(255,255,255,0.08)",
-    };
-
-    const activeChip = {
-        ...softChip,
-        background: "rgba(37,99,235,0.14)",
-        color: "#bfdbfe",
-        border: "1px solid rgba(59,130,246,0.24)",
-    };
-
-    const searchBoxSx = {
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-        height: 42,
-        px: 1.4,
-        borderRadius: "14px",
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        backdropFilter: "blur(10px)",
-    };
 
     return (
         <Box
@@ -2373,83 +1641,64 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 px: { xs: 1, sm: 1.25, md: 1.5 },
             }}
         >
-            {/* HEADER */}
             <Box
                 sx={{
                     ...s.hero,
-                    py: { xs: 1.1, sm: 1.2 },
-                    px: { xs: 1, sm: 1.25, md: 1.5 },
-                    mb: 0.9,
+                    py: { xs: 1, sm: 1.25 },
+                    px: { xs: 1, sm: 1.5 },
+                    mb: 1,
                     flexShrink: 0,
-                    borderRadius: "24px",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background:
-                        "linear-gradient(180deg, rgba(15,23,42,0.72) 0%, rgba(15,23,42,0.54) 100%)",
-                    backdropFilter: "blur(16px)",
-                    boxShadow: "0 18px 40px rgba(0,0,0,0.16)",
                 }}
             >
-                <Stack spacing={1.2}>
-                    <Stack
-                        direction={{ xs: "column", lg: "row" }}
-                        justifyContent="space-between"
-                        alignItems={{ xs: "stretch", lg: "center" }}
-                        spacing={1.2}
-                    >
-                        <Box>
-                            <Typography
-                                sx={{
-                                    color: "#fff",
-                                    fontSize: { xs: 20, sm: 24 },
-                                    fontWeight: 800,
-                                    lineHeight: 1.1,
-                                    letterSpacing: -0.3,
-                                }}
-                            >
-                                Plaka Atama
+                <Stack direction="row" alignItems="center" spacing={1.2} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
+                    <Box sx={s.brandDot} />
+                    <Typography sx={s.heroKicker}>LOGISTICS ENGINE • v5</Typography>
+
+                    {plakaLoading ? (
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 1 }}>
+                            <CircularProgress size={14} />
+                            <Typography sx={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
+                                Plakalar yükleniyor…
                             </Typography>
+                        </Stack>
+                    ) : null}
+                </Stack>
 
-                            {batchId ? (
-                                <Chip
-                                    size="small"
-                                    label={`Batch: ${batchId}`}
-                                    sx={{ ...activeChip, mt: 1 }}
-                                />
-                            ) : null}
-                        </Box>
-
-                        <Box
+                <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: "stretch", md: "flex-end" }}
+                    spacing={{ xs: 1.25, md: 0 }}
+                >
+                    <Box>
+                        <Typography
                             sx={{
-                                ...searchBoxSx,
-                                width: { xs: "100%", lg: 320, xl: 360 },
-                                alignSelf: { xs: "stretch", lg: "center" },
+                                ...s.heroTitle,
+                                fontSize: { xs: 20, sm: 24 },
+                                lineHeight: 1.1,
                             }}
                         >
-                            <SearchIcon sx={{ color: "#60a5fa", fontSize: 19 }} />
-                            <InputBase
-                                placeholder="Ara..."
-                                sx={{
-                                    flex: 1,
-                                    color: "#fff",
-                                    fontSize: 14,
-                                    "& input::placeholder": {
-                                        color: "rgba(255,255,255,0.45)",
-                                        opacity: 1,
-                                    },
-                                }}
-                                value={q}
-                                onChange={(e) => setQ(e.target.value)}
-                            />
-                        </Box>
-                    </Stack>
+                            Dönüş Plaka Atama
+                        </Typography>
+                        <Typography
+                            sx={{
+                                ...s.heroSub,
+                                fontSize: { xs: 11.5, sm: 12 },
+                                mt: 0.25,
+                            }}
+                        >
+                            Veriler donusler_plaka_atama tablosundan yüklenir.
+                        </Typography>
+                    </Box>
 
                     <Stack
                         direction="row"
                         spacing={1}
                         useFlexGap
-                        flexWrap="wrap"
                         sx={{
-                            justifyContent: "flex-start",
+                            mb: 0.5,
+                            flexWrap: "wrap",
+                            justifyContent: { xs: "flex-start", lg: "flex-end" },
                             rowGap: 1,
                             columnGap: 1,
                         }}
@@ -2457,44 +1706,44 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         {can(BTN.COMPLETE_SELECTED) ? (
                             <Button
                                 startIcon={<DoneAllIcon />}
-                                sx={successBtn}
+                                sx={s.secondaryBtn}
                                 onClick={onCompleteSelected}
                                 disabled={loading || saving || selectedIds.size === 0 || !perm.ekranYazma}
                             >
-                                Tamamla
+                                Sefer Tamamla
                             </Button>
                         ) : null}
 
                         {can(BTN.DELETE_SELECTED) ? (
                             <Button
                                 startIcon={<DeleteOutlineIcon />}
-                                sx={dangerBtn}
+                                sx={s.secondaryBtn}
                                 onClick={onDeleteSelected}
                                 disabled={loading || saving || selectedIds.size === 0 || !perm.ekranYazma}
                             >
-                                Seçilenleri Sil
+                                Sil
                             </Button>
                         ) : null}
 
                         {can(BTN.REFRESH) ? (
                             <Button
                                 startIcon={<RefreshIcon />}
-                                sx={ghostBtn}
+                                sx={s.secondaryBtn}
                                 onClick={fetchRows}
                                 disabled={loading || saving}
                             >
-                                {loading ? "Yenileniyor" : "Yenile"}
+                                {loading ? "Yenileniyor..." : "Yenile"}
                             </Button>
                         ) : null}
 
                         {can(BTN.EXPORT) ? (
                             <Button
                                 startIcon={<FileDownloadIcon />}
-                                sx={ghostBtn}
+                                sx={s.secondaryBtn}
                                 onClick={onExport}
                                 disabled={loading || saving || filteredRows.length === 0}
                             >
-                                Excel Aktar
+                                Excel
                             </Button>
                         ) : null}
 
@@ -2502,84 +1751,110 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                             <Button
                                 startIcon={<SaveIcon />}
                                 variant="contained"
-                                sx={primaryBtn}
+                                sx={s.primaryBtn}
                                 onClick={onSave}
                                 disabled={loading || saving || !perm.ekranYazma}
                             >
-                                {saving ? "Kaydediliyor" : "Kaydet"}
+                                {saving ? "Kaydediliyor..." : "Kaydet"}
                             </Button>
                         ) : null}
                     </Stack>
                 </Stack>
             </Box>
-            {/* SEARCH + FILTERS */}
+
             <Stack
                 direction="row"
-                spacing={0.8}
-                useFlexGap
-                flexWrap="wrap"
+                spacing={1}
                 sx={{
-                    mb: 0.75,
+                    mb: 1,
                     alignItems: "center",
+                    flexWrap: "wrap",
                     flexShrink: 0,
+                    rowGap: 1,
+                    columnGap: 1,
                 }}
             >
+                <Box
+                    sx={{
+                        ...s.search,
+                        width: { xs: "100%", md: 320, lg: 360 },
+                        minWidth: 0,
+                        flexShrink: 0,
+                    }}
+                >
+                    <SearchIcon sx={{ color: "#3b82f6", fontSize: 20 }} />
+                    <InputBase
+                        placeholder="Hızlı ara..."
+                        sx={s.searchInput}
+                        value={q}
+                        onChange={(e) => setQ(e.target.value)}
+                    />
+                </Box>
+
+                <Chip icon={<TimelineIcon />} label="Canlı Akış" sx={s.pillActive} />
+
+                <Chip
+                    label="Eksik Kimlik (TC)"
+                    onClick={() => setFilterMissingPlate((v) => !v)}
+                    sx={filterMissingPlate ? s.pillActive : s.pill}
+                />
+
                 {selectedIds.size > 0 ? (
                     <Chip
                         label={`Seçili: ${selectedIds.size}`}
-                        sx={activeChip}
+                        sx={s.pillActive}
                         onDelete={clearSelection}
-                        deleteIcon={<ClearIcon sx={{ color: "#bfdbfe !important" }} />}
-                    />
-                ) : null}
-
-                {autoSaving ? (
-                    <Chip label="Kaydediliyor..." sx={activeChip} />
-                ) : lastAutoSaveAt ? (
-                    <Chip
-                        label={`Kaydedildi • ${lastAutoSaveAt.toLocaleTimeString("tr-TR")}`}
-                        sx={softChip}
-                    />
-                ) : null}
-
-                {!perm.ekranYazma ? (
-                    <Chip
-                        label="Salt Görüntüleme"
-                        sx={{
-                            ...softChip,
-                            color: "#fca5a5",
-                            border: "1px solid rgba(248,113,113,0.24)",
-                            background: "rgba(248,113,113,0.06)",
-                        }}
+                        deleteIcon={<ClearIcon />}
                     />
                 ) : null}
 
                 {loading ? (
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 0.5 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 1 }}>
                         <CircularProgress size={16} />
                         <Typography sx={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
                             Yükleniyor...
                         </Typography>
                     </Stack>
                 ) : null}
+
+                {autoSaving ? (
+                    <Chip label="Otomatik kaydediliyor..." sx={s.pillActive} />
+                ) : lastAutoSaveAt ? (
+                    <Chip
+                        label={`Otomatik kaydedildi: ${lastAutoSaveAt.toLocaleTimeString("tr-TR")}`}
+                        sx={s.pill}
+                    />
+                ) : null}
+
+                {!perm.ekranYazma ? (
+                    <Chip
+                        label="Sadece Görüntüleme"
+                        sx={{ ...s.pill, borderColor: "rgba(248,113,113,0.5)", color: "#fca5a5" }}
+                    />
+                ) : null}
+
+                {(!colPerms || Object.keys(colPerms).length === 0) && (
+                    <Chip
+                        label={`Kolon izinleri yok (grid:${gridId || "?"})`}
+                        sx={{ ...s.pill, borderColor: "rgba(251,191,36,0.5)", color: "#fcd34d" }}
+                    />
+                )}
             </Stack>
+
             {!!loadErr ? <Typography sx={{ color: "#f87171", mb: 2, flexShrink: 0 }}>{loadErr}</Typography> : null}
 
-            <Analizler rows={filteredRows} />
-
-            {/* GRID */}
             <Box
                 sx={{
                     flex: "1 1 auto",
                     minHeight: 0,
-                    maxHeight: { xs: "56dvh", md: "62dvh" },
+                    maxHeight: { xs: "68dvh", md: "74dvh" },
                     overflow: "auto",
                     display: "flex",
-                    pb: { xs: 1, sm: 1.5 },
+                    pb: { xs: 1, sm: 2 },
                     borderRadius: 3,
                 }}
             >
-                <PlakaAtamaGrid
+                <DonusPlakaAtamaGrid
                     rows={filteredRows}
                     columns={columns}
                     s={s}
@@ -2588,6 +1863,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     onOpenSwap={openSwap}
                     onOpenVkn={openVknPanel}
                     onOpenListbox={openListbox}
+                    onOpenIade={openIadeDialog}
                     onChange={handleChange}
                     selectedIds={selectedIds}
                     onToggleRow={toggleRow}
@@ -2600,7 +1876,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 />
             </Box>
 
-            {/* LISTBOX POPOVER */}
             <Popover
                 open={lb.open}
                 anchorEl={lb.anchorEl}
@@ -2616,7 +1891,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 }}
             >
                 <Box sx={{ p: 1.2, pb: 1 }}>
-                    {lb.field !== "arac_durumu" && lb.field !== "peron_no" ? (
+                    {lb.field !== "arac_durumu" ? (
                         <>
                             <Stack direction="row" spacing={1} alignItems="center">
                                 <SearchIcon sx={{ color: "rgba(255,255,255,0.65)", fontSize: 18 }} />
@@ -2637,7 +1912,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         </>
                     ) : (
                         <Typography sx={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>
-                            {lb.field === "arac_durumu" ? "Araç durumu seçin" : "Peron seçin"}
+                            Araç durumu seçin
                         </Typography>
                     )}
                 </Box>
@@ -2649,7 +1924,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                             <Typography sx={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
                                 {plakaLoading
                                     ? "Yükleniyor..."
-                                    : lb.field === "arac_durumu" || lb.field === "peron_no"
+                                    : lb.field === "arac_durumu"
                                         ? "Seçenek bulunamadı."
                                         : String(lb.query || "").trim().length >= 2
                                             ? "Sonuç yok."
@@ -2685,9 +1960,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     },
                 }}
             >
-                <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>
-                    Saat Seç
-                </DialogTitle>
+                <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>Saat Seç</DialogTitle>
 
                 <DialogContent sx={{ pt: "8px !important" }}>
                     <TextField
@@ -2695,9 +1968,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                         type="time"
                         label="Saat"
                         value={timeDlg.value}
-                        onChange={(e) =>
-                            setTimeDlg((prev) => ({ ...prev, value: e.target.value }))
-                        }
+                        onChange={(e) => setTimeDlg((prev) => ({ ...prev, value: e.target.value }))}
                         inputProps={{ step: 300 }}
                         InputLabelProps={{ shrink: true }}
                         sx={{
@@ -2750,7 +2021,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 </DialogActions>
             </Dialog>
 
-            {/* SWAP */}
             <SoforSwapDialog
                 open={swapDlg.open}
                 onClose={() =>
@@ -2798,7 +2068,7 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                     });
                 }}
             />
-            {/* ✅ VKN DEĞİŞTİRME PANELİ */}
+
             <VknDegistirme
                 open={vknDlg.open}
                 onClose={closeVknPanel}
@@ -2806,13 +2076,19 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 rows={rows}
                 setRows={setRows}
                 supabase={supabase}
-                batchId={batchId}
+                batchId={null}
                 onSaved={fetchRows}
                 setSnack={setSnack}
                 s={s}
             />
 
-            {/* ✅ DRAWER */}
+            <IadeOlusturDialog
+                open={iadeDlg.open}
+                onClose={closeIadeDialog}
+                onConfirm={onConfirmCreateIadeRow}
+                row={iadeRow}
+            />
+
             {drawerOpen && (
                 <SeferDetayDrawer
                     open={drawerOpen}
@@ -2825,7 +2101,6 @@ export default function PlakaAtamaPremiumGrid({ batchId = null }) {
                 />
             )}
 
-            {/* SNACK */}
             <Snackbar open={snack.open} autoHideDuration={3000} onClose={() => setSnack((p) => ({ ...p, open: false }))}>
                 <Alert severity={snack.sev} variant="filled" sx={{ borderRadius: "12px" }}>
                     {snack.msg}

@@ -8,7 +8,6 @@ import {
     ListItemIcon,
     ListItemText,
     Typography,
-    Divider,
     IconButton,
     Collapse,
     Tooltip,
@@ -30,22 +29,50 @@ import {
     Bolt,
     AutoAwesome,
     FiberManualRecord,
+    UTurnLeft,
+    Storefront,
+    Route,
 } from "@mui/icons-material";
 
-const DRAWER_WIDTH = 298;
+const DRAWER_WIDTH = 302;
 const COLLAPSED_WIDTH = 92;
+
+const topItems = [
+    {
+        key: "planlama",
+        text: "Planlama",
+        icon: <Route />,
+    },
+];
 
 const groups = [
     {
         key: "kullaniciIslemleri",
-        title: "Kullanıcı İşlemleri",
-        caption: "Operasyon akışı",
-        icon: <ManageAccounts />,
-        accent: "linear-gradient(135deg, #3b82f6, #2563eb)",
+        title: "BİM AFYON",
+        caption: "Ana operasyon yönetimi",
+        icon: <Storefront />,
+        accent: "linear-gradient(135deg, #22c55e, #16a34a)",
         items: [
-            { key: "siparisacilis", text: "Sipariş Açılış", icon: <Assignment /> },
-            { key: "plakaatama", text: "Plaka Atama", icon: <LocalShipping /> },
-            { key: "tamamlanan_seferler", text: "Tamamlanan Seferler", icon: <LocalShipping /> },
+            { key: "siparisacilis", text: "Bim Sipariş Açılış", icon: <Assignment /> },
+            { key: "plakaatama", text: "Bim Plaka Atama", icon: <LocalShipping /> },
+            { key: "tamamlanan_seferler", text: "Bim Tamamlanan Seferler", icon: <LocalShipping /> },
+        ],
+    },
+    {
+        key: "donusler",
+        title: "DÖNÜŞLER",
+        caption: "Dönüş operasyonları",
+        icon: <UTurnLeft />,
+        accent: "linear-gradient(135deg, #f59e0b, #ea580c)",
+        items: [
+            { key: "donus_siparis_acilis", text: "Dönüş Sipariş Açılış", icon: <Assignment /> },
+            { key: "donus_plaka_atama", text: "Dönüş Plaka Atama", icon: <LocalShipping /> },
+            { key: "donus_tamamlanan_seferler", text: "Dönüş Tamamlanan Seferler", icon: <LocalShipping /> },
+            {
+                key: "donus_navlunlar",
+                text: "Navlunlar",
+                icon: <LocalShipping />,
+            }
         ],
     },
     {
@@ -53,14 +80,16 @@ const groups = [
         title: "Araç Yönetimi",
         caption: "Filo görünümü",
         icon: <DirectionsCar />,
-        accent: "linear-gradient(135deg, #10b981, #059669)",
-        items: [{ key: "aracbilgileri", text: "Araç Bilgileri", icon: <CarRepair /> }],
+        accent: "linear-gradient(135deg, #06b6d4, #0891b2)",
+        items: [
+            { key: "aracbilgileri", text: "Araç Bilgileri", icon: <CarRepair /> },
+        ],
     },
     {
         key: "yeniKayitlar",
         title: "Yeni Kayıtlar",
         caption: "Tanım ekranları",
-        icon: <Assignment />,
+        icon: <ManageAccounts />,
         accent: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
         items: [
             { key: "vkn_ekle", text: "VKN Ekle", icon: <ManageAccounts /> },
@@ -69,68 +98,6 @@ const groups = [
         ],
     },
 ];
-
-function NavAction({ expanded, active, icon, label, onClick, primary = false }) {
-    return (
-        <ListItem disablePadding sx={{ mb: 1 }}>
-            <Tooltip title={!expanded ? label : ""} placement="right" arrow>
-                <ListItemButton
-                    onClick={onClick}
-                    sx={{
-                        minHeight: 50,
-                        borderRadius: 3.5,
-                        px: expanded ? 2 : 0,
-                        justifyContent: expanded ? "initial" : "center",
-                        background: active
-                            ? primary
-                                ? "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.14))"
-                                : "linear-gradient(135deg, rgba(255,255,255,0.11), rgba(255,255,255,0.05))"
-                            : "rgba(255,255,255,0.025)",
-                        border: active
-                            ? "1px solid rgba(96,165,250,0.30)"
-                            : "1px solid rgba(255,255,255,0.06)",
-                        color: active ? "#fff" : "#94a3b8",
-                        boxShadow: active ? "0 14px 30px rgba(0,0,0,0.22)" : "none",
-                        transition: "all .22s ease",
-                        "& .MuiListItemIcon-root": {
-                            color: active ? "#93c5fd" : "rgba(255,255,255,0.62)",
-                        },
-                        "&:hover": {
-                            transform: "translateY(-1px)",
-                            background: primary
-                                ? "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))"
-                                : "rgba(255,255,255,0.06)",
-                            color: "#fff",
-                            borderColor: "rgba(255,255,255,0.11)",
-                            "& .MuiListItemIcon-root": { color: "#c4dbff" },
-                        },
-                    }}
-                >
-                    <ListItemIcon
-                        sx={{
-                            minWidth: 0,
-                            mr: expanded ? 1.8 : 0,
-                            justifyContent: "center",
-                        }}
-                    >
-                        {icon}
-                    </ListItemIcon>
-
-                    {expanded && (
-                        <ListItemText
-                            primary={label}
-                            primaryTypographyProps={{
-                                fontSize: "0.84rem",
-                                fontWeight: 900,
-                                letterSpacing: 0.15,
-                            }}
-                        />
-                    )}
-                </ListItemButton>
-            </Tooltip>
-        </ListItem>
-    );
-}
 
 function GroupCard({
     group,
@@ -174,7 +141,7 @@ function GroupCard({
             </ListItem>
 
             <Collapse in={expanded ? isOpen : false} timeout="auto" unmountOnExit>
-                <List sx={{ pb: 0.6 }}>
+                <List sx={{ pb: 0.8 }}>
                     {group.items.map((item) => {
                         const active = selected === item.key;
                         return (
@@ -184,7 +151,7 @@ function GroupCard({
                                     <ListItemText
                                         primary={item.text}
                                         primaryTypographyProps={{
-                                            fontSize: "0.82rem",
+                                            fontSize: "0.84rem",
                                             fontWeight: active ? 900 : 700,
                                         }}
                                     />
@@ -235,6 +202,7 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
 
     const [groupState, setGroupState] = React.useState({
         kullaniciIslemleri: true,
+        donusler: true,
         aracYonetimi: true,
         yeniKayitlar: true,
     });
@@ -321,23 +289,56 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
                     ) : null}
                 </Box>
 
-                <Box>
-                    {expanded && <Typography sx={styles.sectionTitle(expanded)}>Ana Navigasyon</Typography>}
-                    <List sx={{ px: 0, py: 0.2 }}>
-                        <NavAction
-                            expanded={expanded}
-                            active={selected === "anasayfa"}
-                            label="Ana Sayfa"
-                            icon={<Dashboard />}
-                            onClick={() => handleSelect("anasayfa")}
-                            primary
-                        />
-                    </List>
-                </Box>
-
-                <Divider sx={{ borderColor: "rgba(255,255,255,0.05)" }} />
-
                 <Box sx={styles.scrollArea(expanded)}>
+                    {expanded && <Typography sx={styles.sectionTitle(expanded)}>Hızlı Erişim</Typography>}
+
+                    <List sx={{ p: 0, mb: 1.2 }}>
+                        {topItems.map((item) => {
+                            const active = selected === item.key;
+                            return (
+                                <ListItem key={item.key} disablePadding>
+                                    <Tooltip title={!expanded ? item.text : ""} placement="right" arrow>
+                                        <ListItemButton
+                                            onClick={() => handleSelect(item.key)}
+                                            sx={styles.topMenuBtn(active, expanded)}
+                                        >
+                                            <ListItemIcon
+                                                sx={{
+                                                    minWidth: 0,
+                                                    mr: expanded ? 1.4 : 0,
+                                                    justifyContent: "center",
+                                                    color: active ? "#ffffff" : "#93c5fd",
+                                                }}
+                                            >
+                                                <Box sx={styles.topMenuIcon(active)}>
+                                                    {item.icon}
+                                                </Box>
+                                            </ListItemIcon>
+
+                                            {expanded && (
+                                                <>
+                                                    <ListItemText
+                                                        primary={item.text}
+                                                        primaryTypographyProps={{
+                                                            fontSize: "0.92rem",
+                                                            fontWeight: 900,
+                                                            color: "#fff",
+                                                        }}
+                                                    />
+                                                    {active && (
+                                                        <FiberManualRecord
+                                                            sx={{ fontSize: 10, color: "#bfdbfe" }}
+                                                        />
+                                                    )}
+                                                </>
+                                            )}
+                                        </ListItemButton>
+                                    </Tooltip>
+                                </ListItem>
+                            );
+                        })}
+                    </List>
+
                     {expanded && <Typography sx={styles.sectionTitle(expanded)}>Modüller</Typography>}
 
                     <List sx={{ p: 0 }}>
@@ -387,11 +388,11 @@ export default function Sidebar({ open, setOpen, selected, onSelect }) {
 const styles = {
     drawerPaper: {
         background:
-            "radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 22%), radial-gradient(circle at bottom right, rgba(139,92,246,0.10), transparent 24%), linear-gradient(180deg, #060913 0%, #0a1120 42%, #08111c 100%)",
+            "radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 22%), radial-gradient(circle at bottom right, rgba(139,92,246,0.10), transparent 24%), linear-gradient(180deg, #050914 0%, #08101d 45%, #070e18 100%)",
         borderRight: "1px solid rgba(255,255,255,0.07)",
         color: "#94a3b8",
         overflowX: "hidden",
-        boxShadow: "16px 0 50px rgba(0,0,0,0.28)",
+        boxShadow: "16px 0 50px rgba(0,0,0,0.30)",
         backdropFilter: "blur(18px)",
         position: "relative",
         "&::before": {
@@ -417,16 +418,16 @@ const styles = {
 
     topCard: {
         borderRadius: 4,
-        p: 1.4,
+        p: 1.5,
         border: "1px solid rgba(255,255,255,0.08)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))",
         boxShadow: "0 16px 36px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)",
         backdropFilter: "blur(16px)",
     },
 
     logoBox: {
-        width: 42,
-        height: 42,
+        width: 44,
+        height: 44,
         borderRadius: 3,
         background: "linear-gradient(135deg, #3b82f6, #2563eb 60%, #60a5fa)",
         display: "flex",
@@ -472,8 +473,8 @@ const styles = {
 
     sectionTitle: (expanded) => ({
         px: expanded ? 0.6 : 0,
-        mt: 0.4,
-        mb: 0.3,
+        mt: 0.2,
+        mb: 0.5,
         color: "rgba(255,255,255,0.34)",
         fontWeight: 900,
         fontSize: 11,
@@ -488,18 +489,55 @@ const styles = {
         flex: 1,
     }),
 
+    topMenuBtn: (active, expanded) => ({
+        minHeight: 56,
+        borderRadius: 4,
+        px: expanded ? 1.4 : 0,
+        mb: 1.1,
+        justifyContent: expanded ? "initial" : "center",
+        background: active
+            ? "linear-gradient(135deg, rgba(59,130,246,0.28), rgba(37,99,235,0.18))"
+            : "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+        border: active
+            ? "1px solid rgba(96,165,250,0.35)"
+            : "1px solid rgba(255,255,255,0.08)",
+        boxShadow: active
+            ? "0 14px 28px rgba(37,99,235,0.18)"
+            : "0 10px 20px rgba(0,0,0,0.12)",
+        transition: "all .18s ease",
+        "&:hover": {
+            background: "rgba(255,255,255,0.08)",
+            transform: "translateY(-1px)",
+        },
+    }),
+
+    topMenuIcon: (active) => ({
+        width: 38,
+        height: 38,
+        borderRadius: 2.8,
+        background: active
+            ? "linear-gradient(135deg, #3b82f6, #2563eb)"
+            : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: active ? "0 12px 24px rgba(37,99,235,0.28)" : "none",
+        color: "#fff",
+        flexShrink: 0,
+    }),
+
     groupCard: {
         mb: 1.1,
         borderRadius: 4,
         border: "1px solid rgba(255,255,255,0.06)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-        boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
+        boxShadow: "0 14px 28px rgba(0,0,0,0.18)",
         overflow: "hidden",
         backdropFilter: "blur(14px)",
     },
 
     groupBtn: (expanded) => ({
-        minHeight: 56,
+        minHeight: 58,
         borderRadius: 0,
         px: expanded ? 1.4 : 0,
         justifyContent: expanded ? "initial" : "center",
@@ -508,9 +546,9 @@ const styles = {
     }),
 
     groupIconWrap: (accent) => ({
-        width: 36,
-        height: 36,
-        borderRadius: 2.5,
+        width: 38,
+        height: 38,
+        borderRadius: 2.8,
         background: accent,
         display: "flex",
         alignItems: "center",
@@ -523,8 +561,9 @@ const styles = {
     groupTitle: {
         color: "#eef6ff",
         fontWeight: 900,
-        fontSize: "0.84rem",
+        fontSize: "0.88rem",
         lineHeight: 1.1,
+        letterSpacing: 0.2,
     },
 
     groupCaption: {
@@ -534,7 +573,7 @@ const styles = {
     },
 
     childBtn: (active) => ({
-        minHeight: 46,
+        minHeight: 48,
         borderRadius: 3,
         px: 1.4,
         mx: 1,
@@ -558,7 +597,7 @@ const styles = {
     }),
 
     collapsedIconBtn: (active) => ({
-        minHeight: 48,
+        minHeight: 50,
         borderRadius: 3,
         justifyContent: "center",
         mb: 0.7,

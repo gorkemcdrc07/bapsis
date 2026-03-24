@@ -36,41 +36,80 @@ import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 
 const REQUIRED_IRSALIYE_LENGTH = 16;
 
+const glassPanelSx = {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background:
+        "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))",
+    backdropFilter: "blur(16px)",
+    boxShadow: "0 18px 50px rgba(0,0,0,0.28)",
+};
+
+const subtlePanelSx = {
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(255,255,255,0.035)",
+    backdropFilter: "blur(10px)",
+};
+
+const sectionIconWrapSx = {
+    width: 38,
+    height: 38,
+    borderRadius: 2.5,
+    display: "grid",
+    placeItems: "center",
+    background:
+        "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+    flex: "0 0 auto",
+};
+
+const actionButtonSx = {
+    borderRadius: 2.8,
+    py: 1.15,
+    textTransform: "none",
+    fontWeight: 800,
+    letterSpacing: 0.1,
+};
+
+const chipBaseSx = {
+    height: 26,
+    borderRadius: 999,
+    fontWeight: 700,
+    border: "1px solid rgba(255,255,255,0.10)",
+};
+
 const Section = ({ title, subtitle, icon, children, sx }) => (
     <Box
         sx={{
-            p: 2,
-            borderRadius: 3,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background:
-                "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-            backdropFilter: "blur(10px)",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+            p: 2.1,
+            borderRadius: 4,
+            ...glassPanelSx,
             ...sx,
         }}
     >
-        <Stack direction="row" spacing={1.2} alignItems="flex-start" sx={{ mb: 1.5 }}>
-            <Box
-                sx={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 2,
-                    display: "grid",
-                    placeItems: "center",
-                    background: "rgba(255,255,255,0.08)",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    flex: "0 0 auto",
-                }}
-            >
-                {icon}
-            </Box>
+        <Stack direction="row" spacing={1.3} alignItems="flex-start" sx={{ mb: 1.8 }}>
+            <Box sx={sectionIconWrapSx}>{icon}</Box>
 
             <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>
+                <Typography
+                    sx={{
+                        fontWeight: 800,
+                        color: "rgba(255,255,255,0.94)",
+                        letterSpacing: 0.15,
+                    }}
+                >
                     {title}
                 </Typography>
+
                 {subtitle ? (
-                    <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.62)" }}>
+                    <Typography
+                        sx={{
+                            mt: 0.2,
+                            fontSize: 12.5,
+                            lineHeight: 1.45,
+                            color: "rgba(255,255,255,0.62)",
+                        }}
+                    >
                         {subtitle}
                     </Typography>
                 ) : null}
@@ -105,11 +144,13 @@ export default function SeferDetayDrawer({
     const [scanLoading, setScanLoading] = React.useState(false);
 
     const [scanResultValue, setScanResultValue] = React.useState("");
-    const [scanResultType, setScanResultType] = React.useState(""); // success | error
+    const [scanResultType, setScanResultType] = React.useState("");
     const [scanResultMessage, setScanResultMessage] = React.useState("");
 
     const videoRef = React.useRef(null);
     const streamRef = React.useRef(null);
+    const savingRef = React.useRef(false);
+    const autoSaveTimeoutRef = React.useRef(null);
 
     const currentIrsaliyeList = React.useMemo(() => {
         return parseIrsaliyeList(row?.irsaliye);
@@ -117,17 +158,42 @@ export default function SeferDetayDrawer({
 
     const selectFieldSx = (clickable) => ({
         "& .MuiOutlinedInput-root": {
-            borderRadius: 2.2,
-            backgroundColor: clickable ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)",
-            backdropFilter: "blur(8px)",
-            transition: "all .15s ease",
+            minHeight: 42,
+            borderRadius: 2.8,
+            background: clickable
+                ? "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))"
+                : "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
+            backdropFilter: "blur(10px)",
+            transition: "all .18s ease",
             cursor: clickable ? "pointer" : "text",
-            "& fieldset": { borderColor: "rgba(255,255,255,0.14)" },
-            "&:hover fieldset": { borderColor: "rgba(255,255,255,0.28)" },
-            "&.Mui-focused fieldset": { borderColor: "rgba(130,170,255,0.85)" },
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+            "& fieldset": {
+                borderColor: "rgba(255,255,255,0.14)",
+            },
+            "&:hover": {
+                transform: clickable ? "translateY(-1px)" : "none",
+                background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035))",
+            },
+            "&:hover fieldset": {
+                borderColor: "rgba(255,255,255,0.28)",
+            },
+            "&.Mui-focused": {
+                boxShadow:
+                    "0 0 0 4px rgba(120,160,255,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
+            },
+            "&.Mui-focused fieldset": {
+                borderColor: "rgba(130,170,255,0.85)",
+            },
         },
-        "& .MuiInputLabel-root": { color: "rgba(255,255,255,0.65)" },
-        "& .MuiInputBase-input": { color: "rgba(255,255,255,0.92)" },
+        "& .MuiInputLabel-root": {
+            color: "rgba(255,255,255,0.62)",
+            fontSize: 13,
+        },
+        "& .MuiInputBase-input": {
+            color: "rgba(255,255,255,0.94)",
+            fontWeight: 500,
+        },
         "& .MuiInputBase-input.Mui-disabled": {
             WebkitTextFillColor: "rgba(255,255,255,0.72)",
         },
@@ -160,6 +226,35 @@ export default function SeferDetayDrawer({
         setScanResultType("");
         setScanResultMessage("");
     }, [stopCamera]);
+
+    const autoSaveIrsaliye = React.useCallback(async () => {
+        if (!row || !canEdit) return;
+        if (savingRef.current) return;
+
+        try {
+            savingRef.current = true;
+            setSaving(true);
+
+            await new Promise((resolve) => setTimeout(resolve, 250));
+
+            setSavedOpen(true);
+        } catch (err) {
+            console.error("Auto save error:", err);
+        } finally {
+            savingRef.current = false;
+            setSaving(false);
+        }
+    }, [row, canEdit]);
+
+    const scheduleAutoSaveIrsaliye = React.useCallback(() => {
+        if (autoSaveTimeoutRef.current) {
+            clearTimeout(autoSaveTimeoutRef.current);
+        }
+
+        autoSaveTimeoutRef.current = setTimeout(() => {
+            autoSaveIrsaliye();
+        }, 500);
+    }, [autoSaveIrsaliye]);
 
     const startScanner = React.useCallback(async () => {
         if (!row?.id || !canEdit) return;
@@ -204,6 +299,9 @@ export default function SeferDetayDrawer({
     React.useEffect(() => {
         return () => {
             stopCamera();
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+            }
         };
     }, [stopCamera]);
 
@@ -331,9 +429,10 @@ export default function SeferDetayDrawer({
                 : irsaliyeNo;
 
             handleChange(row.id, "irsaliye", updatedValue);
+            await autoSaveIrsaliye();
 
             setScanResultType("success");
-            setScanResultMessage("16 karakter tamam, değer eklendi.");
+            setScanResultMessage("16 karakter tamam, değer otomatik kaydedildi.");
             setScanError("");
         } catch (err) {
             console.error("OCR read error:", err);
@@ -343,7 +442,15 @@ export default function SeferDetayDrawer({
         } finally {
             setScanLoading(false);
         }
-    }, [row, canEdit, captureFrame, cropTableArea, extractIrsaliyeNoFromText, handleChange]);
+    }, [
+        row,
+        canEdit,
+        captureFrame,
+        cropTableArea,
+        extractIrsaliyeNoFromText,
+        handleChange,
+        autoSaveIrsaliye,
+    ]);
 
     const handleSave = async () => {
         if (!row || !canEdit) return;
@@ -359,6 +466,12 @@ export default function SeferDetayDrawer({
         }
     };
 
+    const handleIrsaliyeManualChange = (value) => {
+        if (!row?.id || !canEdit) return;
+        handleChange(row.id, "irsaliye", value);
+        scheduleAutoSaveIrsaliye();
+    };
+
     const openLb = (e, id, field) => {
         if (!canEdit) return;
         openListbox?.(e, id, field);
@@ -372,17 +485,17 @@ export default function SeferDetayDrawer({
             PaperProps={{
                 sx: {
                     ...(s?.drawerPaper || {}),
-                    width: { xs: "100%", sm: 520 },
+                    width: { xs: "100%", sm: 560 },
                     maxWidth: "100vw",
-                    borderRadius: { xs: 0, sm: "18px 0 0 18px" },
+                    borderRadius: { xs: 0, sm: "24px 0 0 24px" },
                     overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
                     height: "100%",
                     background:
-                        "radial-gradient(1200px 600px at 20% 0%, rgba(120,160,255,0.18), transparent 50%)," +
-                        "linear-gradient(180deg, rgba(18,20,26,0.96), rgba(14,16,22,0.96))",
+                        "radial-gradient(900px 500px at 10% 0%, rgba(104,144,255,0.20), transparent 52%), radial-gradient(700px 500px at 100% 20%, rgba(80,215,170,0.08), transparent 42%), linear-gradient(180deg, #0b1018 0%, #0c1119 35%, #0a0f17 100%)",
                     borderLeft: "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: "-24px 0 60px rgba(0,0,0,0.32)",
                 },
             }}
         >
@@ -391,23 +504,34 @@ export default function SeferDetayDrawer({
                     position: "sticky",
                     top: 0,
                     zIndex: 5,
-                    px: 2,
-                    pt: 2,
-                    pb: 1.5,
+                    px: 2.2,
+                    pt: 2.2,
+                    pb: 1.7,
                     flexShrink: 0,
-                    backdropFilter: "blur(12px)",
-                    background: "rgba(10,12,18,0.78)",
+                    backdropFilter: "blur(18px)",
+                    background:
+                        "linear-gradient(180deg, rgba(10,12,18,0.92), rgba(10,12,18,0.78))",
                     borderBottom: "1px solid rgba(255,255,255,0.08)",
                 }}
             >
-                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
+                <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    spacing={1.5}
+                >
                     <Box sx={{ minWidth: 0, flex: 1 }}>
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+                        <Stack
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                            sx={{ flexWrap: "wrap", rowGap: 1 }}
+                        >
                             <Typography
                                 sx={{
-                                    fontSize: 16,
-                                    fontWeight: 800,
-                                    letterSpacing: 0.2,
+                                    fontSize: 18,
+                                    fontWeight: 900,
+                                    letterSpacing: 0.25,
                                     color: "#fff",
                                 }}
                             >
@@ -418,12 +542,10 @@ export default function SeferDetayDrawer({
                                 size="small"
                                 label={row?.sefer ? `#${row.sefer}` : "Sefer yok"}
                                 sx={{
-                                    height: 24,
-                                    fontWeight: 700,
-                                    borderRadius: 999,
+                                    ...chipBaseSx,
                                     background: "rgba(120,160,255,0.14)",
-                                    color: "rgba(220,235,255,0.95)",
-                                    border: "1px solid rgba(120,160,255,0.22)",
+                                    color: "rgba(220,235,255,0.96)",
+                                    border: "1px solid rgba(120,160,255,0.24)",
                                 }}
                             />
 
@@ -432,12 +554,9 @@ export default function SeferDetayDrawer({
                                     size="small"
                                     label="Sadece Görüntüleme"
                                     sx={{
-                                        height: 24,
-                                        fontWeight: 800,
-                                        borderRadius: 999,
+                                        ...chipBaseSx,
                                         background: "rgba(255,255,255,0.06)",
-                                        color: "rgba(255,255,255,0.85)",
-                                        border: "1px solid rgba(255,255,255,0.10)",
+                                        color: "rgba(255,255,255,0.86)",
                                     }}
                                 />
                             ) : null}
@@ -447,28 +566,24 @@ export default function SeferDetayDrawer({
                             direction="row"
                             spacing={1}
                             alignItems="center"
-                            sx={{ mt: 0.9, flexWrap: "wrap", rowGap: 1 }}
+                            sx={{ mt: 1, flexWrap: "wrap", rowGap: 1 }}
                         >
                             <Chip
                                 size="small"
                                 label={row?.tc ? `TC: ${row.tc}` : "TC: -"}
                                 sx={{
-                                    height: 24,
-                                    borderRadius: 999,
-                                    background: "rgba(255,255,255,0.06)",
-                                    color: "rgba(255,255,255,0.85)",
-                                    border: "1px solid rgba(255,255,255,0.10)",
+                                    ...chipBaseSx,
+                                    background: "rgba(255,255,255,0.05)",
+                                    color: "rgba(255,255,255,0.84)",
                                 }}
                             />
                             <Chip
                                 size="small"
                                 label={row?.sevk ? `Sevk: ${row.sevk}` : "Sevk: -"}
                                 sx={{
-                                    height: 24,
-                                    borderRadius: 999,
-                                    background: "rgba(255,255,255,0.06)",
-                                    color: "rgba(255,255,255,0.85)",
-                                    border: "1px solid rgba(255,255,255,0.10)",
+                                    ...chipBaseSx,
+                                    background: "rgba(255,255,255,0.05)",
+                                    color: "rgba(255,255,255,0.84)",
                                 }}
                             />
                         </Stack>
@@ -478,14 +593,18 @@ export default function SeferDetayDrawer({
                         <IconButton
                             onClick={onClose}
                             sx={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 2,
+                                width: 42,
+                                height: 42,
+                                borderRadius: 2.8,
                                 flexShrink: 0,
-                                background: "rgba(255,255,255,0.06)",
+                                background:
+                                    "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
                                 border: "1px solid rgba(255,255,255,0.10)",
                                 color: "#fff",
-                                "&:hover": { background: "rgba(255,255,255,0.10)" },
+                                "&:hover": {
+                                    background:
+                                        "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06))",
+                                },
                             }}
                         >
                             <CloseIcon />
@@ -501,14 +620,14 @@ export default function SeferDetayDrawer({
                     overflowY: "auto",
                     overflowX: "hidden",
                     p: 2.2,
-                    pb: 2,
+                    pb: 2.2,
                     pr: 1.4,
                     scrollbarWidth: "thin",
-                    scrollbarColor: "rgba(255,255,255,0.18) transparent",
+                    scrollbarColor: "rgba(255,255,255,0.16) transparent",
                     "&::-webkit-scrollbar": { width: 8 },
                     "&::-webkit-scrollbar-track": { background: "transparent" },
                     "&::-webkit-scrollbar-thumb": {
-                        background: "rgba(255,255,255,0.16)",
+                        background: "rgba(255,255,255,0.14)",
                         borderRadius: 999,
                     },
                     "&::-webkit-scrollbar-thumb:hover": {
@@ -519,13 +638,13 @@ export default function SeferDetayDrawer({
                 {!row ? (
                     <Box
                         sx={{
-                            p: 2.2,
-                            borderRadius: 3,
+                            p: 2.4,
+                            borderRadius: 4,
                             border: "1px dashed rgba(255,255,255,0.18)",
                             background: "rgba(255,255,255,0.04)",
                         }}
                     >
-                        <Typography sx={{ color: "rgba(255,255,255,0.70)" }}>
+                        <Typography sx={{ color: "rgba(255,255,255,0.72)", fontWeight: 600 }}>
                             Bir satır seçin.
                         </Typography>
                     </Box>
@@ -533,13 +652,23 @@ export default function SeferDetayDrawer({
                     <>
                         <Box
                             sx={{
-                                p: 2.2,
-                                borderRadius: 3,
+                                p: 2.4,
+                                borderRadius: 4,
                                 border: "1px solid rgba(255,255,255,0.10)",
                                 background:
-                                    "linear-gradient(135deg, rgba(120,160,255,0.16), rgba(255,255,255,0.04))",
-                                backdropFilter: "blur(10px)",
-                                boxShadow: "0 16px 40px rgba(0,0,0,0.30)",
+                                    "linear-gradient(135deg, rgba(120,160,255,0.18), rgba(255,255,255,0.05))",
+                                backdropFilter: "blur(14px)",
+                                boxShadow: "0 20px 44px rgba(0,0,0,0.30)",
+                                position: "relative",
+                                overflow: "hidden",
+                                "&::before": {
+                                    content: '""',
+                                    position: "absolute",
+                                    inset: 0,
+                                    background:
+                                        "linear-gradient(90deg, rgba(255,255,255,0.05), transparent 35%, transparent 65%, rgba(255,255,255,0.03))",
+                                    pointerEvents: "none",
+                                },
                             }}
                         >
                             <Stack
@@ -551,10 +680,11 @@ export default function SeferDetayDrawer({
                                 <Box sx={{ minWidth: 0, width: "100%" }}>
                                     <Typography
                                         sx={{
-                                            fontSize: 18,
+                                            fontSize: 20,
                                             fontWeight: 900,
                                             color: "#fff",
                                             wordBreak: "break-word",
+                                            letterSpacing: 0.2,
                                         }}
                                     >
                                         {row.sefer || "Sefer"}
@@ -562,36 +692,73 @@ export default function SeferDetayDrawer({
 
                                     <Typography
                                         sx={{
-                                            mt: 0.3,
+                                            mt: 0.4,
                                             fontSize: 13,
-                                            color: "rgba(255,255,255,0.70)",
+                                            color: "rgba(255,255,255,0.72)",
                                             wordBreak: "break-word",
                                         }}
                                     >
                                         {row.sevk ? `Sevk: ${row.sevk}` : "Sevk: -"}
                                     </Typography>
 
-                                    <Stack direction="row" spacing={1} sx={{ mt: 1.2, flexWrap: "wrap", rowGap: 1 }}>
-                                        <Chip size="small" label={`Çekici: ${row.cekici || "-"}`} sx={{ borderRadius: 999 }} />
-                                        <Chip size="small" label={`Dorse: ${row.dorse || "-"}`} sx={{ borderRadius: 999 }} />
-                                        <Chip size="small" label={`TC: ${row.tc || "-"}`} sx={{ borderRadius: 999 }} />
+                                    <Stack
+                                        direction="row"
+                                        spacing={1}
+                                        sx={{ mt: 1.4, flexWrap: "wrap", rowGap: 1 }}
+                                    >
+                                        <Chip
+                                            size="small"
+                                            label={`Çekici: ${row.cekici || "-"}`}
+                                            sx={{
+                                                ...chipBaseSx,
+                                                background: "rgba(255,255,255,0.07)",
+                                                color: "rgba(255,255,255,0.90)",
+                                            }}
+                                        />
+                                        <Chip
+                                            size="small"
+                                            label={`Dorse: ${row.dorse || "-"}`}
+                                            sx={{
+                                                ...chipBaseSx,
+                                                background: "rgba(255,255,255,0.07)",
+                                                color: "rgba(255,255,255,0.90)",
+                                            }}
+                                        />
+                                        <Chip
+                                            size="small"
+                                            label={`TC: ${row.tc || "-"}`}
+                                            sx={{
+                                                ...chipBaseSx,
+                                                background: "rgba(255,255,255,0.07)",
+                                                color: "rgba(255,255,255,0.90)",
+                                            }}
+                                        />
                                     </Stack>
                                 </Box>
 
                                 <Box
                                     sx={{
                                         textAlign: { xs: "left", sm: "right" },
-                                        minWidth: { xs: "100%", sm: 140 },
+                                        minWidth: { xs: "100%", sm: 150 },
+                                        alignSelf: "center",
                                     }}
                                 >
-                                    <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
+                                    <Typography
+                                        sx={{
+                                            fontSize: 12,
+                                            color: "rgba(255,255,255,0.60)",
+                                            letterSpacing: 0.2,
+                                        }}
+                                    >
                                         Sürücü
                                     </Typography>
                                     <Typography
                                         sx={{
-                                            fontWeight: 800,
+                                            mt: 0.35,
+                                            fontWeight: 900,
                                             color: "#fff",
                                             wordBreak: "break-word",
+                                            fontSize: 16,
                                         }}
                                     >
                                         {row.surucu || "-"}
@@ -599,7 +766,7 @@ export default function SeferDetayDrawer({
                                     <Typography
                                         sx={{
                                             fontSize: 12.5,
-                                            color: "rgba(255,255,255,0.70)",
+                                            color: "rgba(255,255,255,0.72)",
                                             wordBreak: "break-word",
                                         }}
                                     >
@@ -619,7 +786,7 @@ export default function SeferDetayDrawer({
                                     sx={{
                                         display: "grid",
                                         gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                                        gap: 1.4,
+                                        gap: 1.5,
                                     }}
                                 >
                                     <TextField
@@ -631,7 +798,11 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon
+                                                    sx={{ opacity: canEdit ? 0.85 : 0.35 }}
+                                                />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "cekici")}
                                         sx={selectFieldSx(canEdit)}
@@ -647,7 +818,11 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon
+                                                    sx={{ opacity: canEdit ? 0.85 : 0.35 }}
+                                                />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "dorse")}
                                         sx={selectFieldSx(canEdit)}
@@ -663,7 +838,11 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon
+                                                    sx={{ opacity: canEdit ? 0.85 : 0.35 }}
+                                                />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "surucu")}
                                         sx={selectFieldSx(canEdit)}
@@ -679,7 +858,11 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon
+                                                    sx={{ opacity: canEdit ? 0.85 : 0.35 }}
+                                                />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "tel")}
                                         sx={selectFieldSx(canEdit)}
@@ -695,7 +878,11 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon
+                                                    sx={{ opacity: canEdit ? 0.85 : 0.35 }}
+                                                />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "tc")}
                                         sx={selectFieldSx(canEdit)}
@@ -711,7 +898,11 @@ export default function SeferDetayDrawer({
                                         InputLabelProps={{ shrink: true }}
                                         InputProps={{
                                             readOnly: true,
-                                            endAdornment: <KeyboardArrowDownIcon sx={{ opacity: canEdit ? 0.85 : 0.35 }} />,
+                                            endAdornment: (
+                                                <KeyboardArrowDownIcon
+                                                    sx={{ opacity: canEdit ? 0.85 : 0.35 }}
+                                                />
+                                            ),
                                         }}
                                         onClick={(e) => openLb(e, row.id, "vkn")}
                                         sx={selectFieldSx(canEdit)}
@@ -729,7 +920,7 @@ export default function SeferDetayDrawer({
                                     sx={{
                                         display: "grid",
                                         gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                                        gap: 1.4,
+                                        gap: 1.5,
                                     }}
                                 >
                                     <TextField
@@ -779,13 +970,13 @@ export default function SeferDetayDrawer({
                                     sx={{
                                         display: "grid",
                                         gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                                        gap: 1.4,
+                                        gap: 1.5,
                                     }}
                                 >
                                     <Box
                                         sx={{
                                             display: "grid",
-                                            gridTemplateColumns: "1fr auto",
+                                            gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
                                             gap: 1,
                                             alignItems: "start",
                                             gridColumn: { xs: "1 / -1", sm: "auto" },
@@ -795,11 +986,22 @@ export default function SeferDetayDrawer({
                                             fullWidth
                                             label="İrsaliye"
                                             value={row.irsaliye ?? ""}
-                                            onChange={(e) => handleChange(row.id, "irsaliye", e.target.value)}
+                                            onChange={(e) => handleIrsaliyeManualChange(e.target.value)}
                                             size="small"
                                             variant="outlined"
                                             InputLabelProps={{ shrink: true }}
-                                            sx={selectFieldSx(false)}
+                                            helperText={
+                                                saving
+                                                    ? "İrsaliye otomatik kaydediliyor..."
+                                                    : "İrsaliye otomatik kaydedilir"
+                                            }
+                                            sx={{
+                                                ...selectFieldSx(false),
+                                                "& .MuiFormHelperText-root": {
+                                                    color: "rgba(255,255,255,0.58)",
+                                                    ml: 0.2,
+                                                },
+                                            }}
                                             disabled={!canEdit}
                                         />
 
@@ -809,17 +1011,17 @@ export default function SeferDetayDrawer({
                                             disabled={!canEdit || scanLoading}
                                             startIcon={<DocumentScannerOutlinedIcon />}
                                             sx={{
-                                                minWidth: 148,
+                                                ...actionButtonSx,
+                                                minWidth: 154,
                                                 height: 40,
-                                                borderRadius: 2.2,
-                                                textTransform: "none",
-                                                fontWeight: 800,
                                                 borderColor: "rgba(255,255,255,0.22)",
-                                                color: "rgba(255,255,255,0.90)",
-                                                background: "rgba(255,255,255,0.03)",
+                                                color: "rgba(255,255,255,0.92)",
+                                                background:
+                                                    "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
                                                 "&:hover": {
                                                     borderColor: "rgba(255,255,255,0.35)",
-                                                    background: "rgba(255,255,255,0.06)",
+                                                    background:
+                                                        "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
                                                 },
                                             }}
                                         >
@@ -857,9 +1059,9 @@ export default function SeferDetayDrawer({
                                 title="Sistem"
                                 subtitle="Otomatik alanlar."
                                 icon={<InfoOutlinedIcon fontSize="small" />}
-                                sx={{ opacity: 0.9 }}
+                                sx={{ opacity: 0.95 }}
                             >
-                                <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1.4 }}>
+                                <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1.5 }}>
                                     <TextField
                                         fullWidth
                                         label="Güncellendi"
@@ -884,8 +1086,9 @@ export default function SeferDetayDrawer({
                     zIndex: 6,
                     flexShrink: 0,
                     p: 2,
-                    backdropFilter: "blur(14px)",
-                    background: "rgba(10,12,18,0.92)",
+                    backdropFilter: "blur(18px)",
+                    background:
+                        "linear-gradient(180deg, rgba(10,12,18,0.72), rgba(10,12,18,0.94))",
                     borderTop: "1px solid rgba(255,255,255,0.08)",
                 }}
             >
@@ -897,11 +1100,10 @@ export default function SeferDetayDrawer({
                         onClick={handleSave}
                         disabled={!row || saving || !canEdit}
                         sx={{
-                            borderRadius: 2.2,
-                            py: 1.15,
-                            fontWeight: 800,
-                            textTransform: "none",
-                            boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+                            ...actionButtonSx,
+                            background:
+                                "linear-gradient(135deg, rgba(91,140,255,1), rgba(80,110,255,0.95))",
+                            boxShadow: "0 14px 30px rgba(43,84,200,0.34)",
                         }}
                     >
                         {saving ? "Kaydediliyor..." : "Kaydet"}
@@ -912,13 +1114,14 @@ export default function SeferDetayDrawer({
                         variant="outlined"
                         onClick={onClose}
                         sx={{
-                            borderRadius: 2.2,
-                            py: 1.15,
-                            fontWeight: 800,
-                            textTransform: "none",
+                            ...actionButtonSx,
                             borderColor: "rgba(255,255,255,0.22)",
                             color: "rgba(255,255,255,0.90)",
-                            "&:hover": { borderColor: "rgba(255,255,255,0.35)" },
+                            background: "rgba(255,255,255,0.02)",
+                            "&:hover": {
+                                borderColor: "rgba(255,255,255,0.35)",
+                                background: "rgba(255,255,255,0.05)",
+                            },
                         }}
                     >
                         Kapat
@@ -944,13 +1147,7 @@ export default function SeferDetayDrawer({
                     },
                 }}
             >
-                <DialogTitle
-                    sx={{
-                        px: 2.5,
-                        pt: 2.2,
-                        pb: 1.4,
-                    }}
-                >
+                <DialogTitle sx={{ px: 2.5, pt: 2.2, pb: 1.4 }}>
                     <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
                         <Stack direction="row" spacing={1.2} alignItems="center">
                             <Box
@@ -997,29 +1194,43 @@ export default function SeferDetayDrawer({
                     <Box
                         sx={{
                             mb: 1.2,
-                            p: 1.5,
+                            p: 1.6,
                             borderRadius: 3,
-                            border: "1px solid rgba(255,255,255,0.08)",
-                            background: "rgba(255,255,255,0.04)",
+                            ...subtlePanelSx,
                         }}
                     >
                         <Stack direction="row" spacing={1.2} alignItems="flex-start">
-                            <AutoAwesomeRoundedIcon sx={{ mt: "2px", color: "rgba(150,190,255,0.95)" }} />
+                            <AutoAwesomeRoundedIcon
+                                sx={{ mt: "2px", color: "rgba(150,190,255,0.95)" }}
+                            />
                             <Box sx={{ width: "100%" }}>
-                                <Typography sx={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", fontWeight: 700 }}>
+                                <Typography
+                                    sx={{
+                                        fontSize: 13.5,
+                                        color: "rgba(255,255,255,0.90)",
+                                        fontWeight: 800,
+                                    }}
+                                >
                                     Belgeyi alt-orta alana hizalayın
                                 </Typography>
-                                <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.64)", mt: 0.3 }}>
-                                    Sistem alt bölümdeki tabloyu okuyup <b>İrsaliye No</b> alanını otomatik bulur.
+                                <Typography
+                                    sx={{
+                                        fontSize: 12.5,
+                                        color: "rgba(255,255,255,0.64)",
+                                        mt: 0.3,
+                                    }}
+                                >
+                                    Sistem alt bölümdeki tabloyu okuyup <b>İrsaliye No</b> alanını
+                                    otomatik bulur.
                                 </Typography>
 
                                 {(scanResultValue || scanResultMessage) ? (
                                     <Box
                                         sx={{
                                             mt: 1.2,
-                                            px: 1.2,
-                                            py: 1,
-                                            borderRadius: 2,
+                                            px: 1.25,
+                                            py: 1.05,
+                                            borderRadius: 2.4,
                                             border:
                                                 scanResultType === "success"
                                                     ? "1px solid rgba(102,224,163,0.25)"
@@ -1030,11 +1241,20 @@ export default function SeferDetayDrawer({
                                                     : "rgba(255,143,143,0.08)",
                                         }}
                                     >
-                                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: scanResultValue ? 0.6 : 0 }}>
+                                        <Stack
+                                            direction="row"
+                                            spacing={1}
+                                            alignItems="center"
+                                            sx={{ mb: scanResultValue ? 0.6 : 0 }}
+                                        >
                                             {scanResultType === "success" ? (
-                                                <CheckCircleOutlineRoundedIcon sx={{ color: "#66e0a3", fontSize: 18 }} />
+                                                <CheckCircleOutlineRoundedIcon
+                                                    sx={{ color: "#66e0a3", fontSize: 18 }}
+                                                />
                                             ) : (
-                                                <ErrorOutlineRoundedIcon sx={{ color: "#ff8f8f", fontSize: 18 }} />
+                                                <ErrorOutlineRoundedIcon
+                                                    sx={{ color: "#ff8f8f", fontSize: 18 }}
+                                                />
                                             )}
 
                                             <Typography
@@ -1053,7 +1273,12 @@ export default function SeferDetayDrawer({
 
                                         {scanResultValue ? (
                                             <>
-                                                <Typography sx={{ fontSize: 11.5, color: "rgba(255,255,255,0.56)" }}>
+                                                <Typography
+                                                    sx={{
+                                                        fontSize: 11.5,
+                                                        color: "rgba(255,255,255,0.56)",
+                                                    }}
+                                                >
                                                     Okunan değer
                                                 </Typography>
                                                 <Typography
@@ -1078,7 +1303,8 @@ export default function SeferDetayDrawer({
                                                                 : "rgba(255,220,220,0.78)",
                                                     }}
                                                 >
-                                                    Karakter sayısı: {scanResultValue.length}/{REQUIRED_IRSALIYE_LENGTH}
+                                                    Karakter sayısı: {scanResultValue.length}/
+                                                    {REQUIRED_IRSALIYE_LENGTH}
                                                 </Typography>
                                             </>
                                         ) : null}
@@ -1097,7 +1323,8 @@ export default function SeferDetayDrawer({
                             background: "rgba(255,255,255,0.04)",
                             border: "1px solid rgba(255,255,255,0.10)",
                             position: "relative",
-                            boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03)",
+                            boxShadow:
+                                "inset 0 0 0 1px rgba(255,255,255,0.03), 0 12px 28px rgba(0,0,0,0.18)",
                         }}
                     >
                         <video
@@ -1154,12 +1381,18 @@ export default function SeferDetayDrawer({
                             <Box
                                 sx={{
                                     p: 1.4,
-                                    borderRadius: 2.5,
-                                    border: "1px solid rgba(255,255,255,0.08)",
-                                    background: "rgba(255,255,255,0.035)",
+                                    borderRadius: 2.6,
+                                    ...subtlePanelSx,
                                 }}
                             >
-                                <Typography sx={{ fontSize: 12.5, color: "rgba(255,255,255,0.66)", mb: 1 }}>
+                                <Typography
+                                    sx={{
+                                        fontSize: 12.5,
+                                        color: "rgba(255,255,255,0.66)",
+                                        mb: 1,
+                                        fontWeight: 700,
+                                    }}
+                                >
                                     Mevcut İrsaliye Değerleri
                                 </Typography>
 
@@ -1170,8 +1403,7 @@ export default function SeferDetayDrawer({
                                             label={item}
                                             size="small"
                                             sx={{
-                                                borderRadius: 999,
-                                                fontWeight: 700,
+                                                ...chipBaseSx,
                                                 background: "rgba(120,160,255,0.14)",
                                                 color: "rgba(230,240,255,0.96)",
                                                 border: "1px solid rgba(120,160,255,0.20)",
@@ -1186,13 +1418,14 @@ export default function SeferDetayDrawer({
                             <Box
                                 sx={{
                                     p: 1.4,
-                                    borderRadius: 2.5,
-                                    border: "1px solid rgba(255,255,255,0.08)",
-                                    background: "rgba(255,255,255,0.035)",
+                                    borderRadius: 2.6,
+                                    ...subtlePanelSx,
                                 }}
                             >
                                 <Typography sx={{ fontSize: 13, color: "rgba(255,255,255,0.76)" }}>
-                                    {videoRef.current?.srcObject ? "Tablo okunuyor..." : "Kamera açılıyor..."}
+                                    {videoRef.current?.srcObject
+                                        ? "Tablo okunuyor..."
+                                        : "Kamera açılıyor..."}
                                 </Typography>
                             </Box>
                         ) : null}
@@ -1201,8 +1434,22 @@ export default function SeferDetayDrawer({
                     <Divider sx={{ my: 1.8, borderColor: "rgba(255,255,255,0.08)" }} />
 
                     <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.56)" }}>
-                        İrsaliye no tam olarak <b>16 karakter</b> olmalıdır. Eksik okunursa ekleme yapılmaz.
+                        İrsaliye no tam olarak <b>16 karakter</b> olmalıdır. Eksik okunursa ekleme
+                        yapılmaz.
                     </Typography>
+
+                    {scanError ? (
+                        <Typography
+                            sx={{
+                                mt: 1,
+                                fontSize: 12,
+                                color: "rgba(255,160,160,0.9)",
+                                fontWeight: 700,
+                            }}
+                        >
+                            {scanError}
+                        </Typography>
+                    ) : null}
                 </DialogContent>
 
                 <DialogActions sx={{ px: 2.5, pb: 2.3, pt: 0.5 }}>
@@ -1212,6 +1459,8 @@ export default function SeferDetayDrawer({
                             color: "rgba(255,255,255,0.78)",
                             borderRadius: 2.2,
                             px: 2,
+                            textTransform: "none",
+                            fontWeight: 700,
                         }}
                     >
                         Kapat
@@ -1223,10 +1472,8 @@ export default function SeferDetayDrawer({
                         disabled={scanLoading || !canEdit}
                         startIcon={<DocumentScannerOutlinedIcon />}
                         sx={{
-                            borderRadius: 2.2,
-                            textTransform: "none",
-                            fontWeight: 800,
-                            px: 2.2,
+                            ...actionButtonSx,
+                            px: 2.3,
                             boxShadow: "0 10px 24px rgba(0,0,0,0.30)",
                         }}
                     >
@@ -1237,7 +1484,7 @@ export default function SeferDetayDrawer({
 
             <Snackbar
                 open={savedOpen}
-                autoHideDuration={2500}
+                autoHideDuration={2000}
                 onClose={() => setSavedOpen(false)}
                 anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
             >
@@ -1245,9 +1492,9 @@ export default function SeferDetayDrawer({
                     severity="success"
                     variant="filled"
                     onClose={() => setSavedOpen(false)}
-                    sx={{ width: "100%", borderRadius: 2 }}
+                    sx={{ width: "100%", borderRadius: 2.5, fontWeight: 700 }}
                 >
-                    Sefer başarıyla kaydedildi
+                    İrsaliye otomatik kaydedildi
                 </Alert>
             </Snackbar>
         </Drawer>
